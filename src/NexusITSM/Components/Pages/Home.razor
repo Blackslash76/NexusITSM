@@ -127,8 +127,12 @@
     </div>
 </div>
 
+@implements IAsyncDisposable
+
 @code {
     [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private HubConnection? _hub;
 
     private int OpenCount;
     private int InProgressCount;
@@ -149,6 +153,29 @@
     private List<Change> UpcomingChanges = [];
 
     protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+
+        // SignalR auto-refresh on SLA updates
+        _hub = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/hubs/notifications"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hub.On<int>("SLAUpdated", async _ =>
+        {
+            await InvokeAsync(async () => { await LoadDataAsync(); StateHasChanged(); });
+        });
+
+        _hub.On<string, string, string?>("Notification", async (type, msg, id) =>
+        {
+            await InvokeAsync(async () => { await LoadDataAsync(); StateHasChanged(); });
+        });
+
+        try { await _hub.StartAsync(); } catch { }
+    }
+
+    private async Task LoadDataAsync()
     {
         var active = await Db.Tickets
             .Include(t => t.Assignee)
@@ -184,6 +211,11 @@
         CategoryCounts = active.GroupBy(t => t.Category)
             .Select(g => new CategoryCount(g.Key.ToString(), g.Count()))
             .OrderByDescending(c => c.Count).Take(8).ToList();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null) await _hub.DisposeAsync();
     }
 
     private record GroupWorkload(string Name, string Icon, string Color, string Level, int Count);

@@ -1,37 +1,89 @@
+@implements IAsyncDisposable
+@inject NavigationManager Nav
+
 <div class="toast-stack" id="toast-stack">
     @foreach (var t in _toasts)
     {
-        <div class="toast @t.CssClass">
-            @t.Message
+        <div class="toast @t.CssClass" @onclick="() => OnToastClick(t)">
+            <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:14px">@t.Icon</span>
+                <span>@t.Message</span>
+            </div>
+            @if (t.TicketId != null)
+            {
+                <span style="font-size:9px;font-family:var(--mono);color:var(--t4);margin-top:2px">@t.TicketId — clicca per aprire</span>
+            }
         </div>
     }
 </div>
 
 @code {
     private readonly List<ToastItem> _toasts = [];
+    private HubConnection? _hub;
 
-    public void Show(string message, string type = "inf")
+    protected override async Task OnInitializedAsync()
     {
-        _toasts.Add(new ToastItem(message, type));
-        StateHasChanged();
-        _ = RemoveAfterDelay(_toasts.Last());
+        _hub = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/hubs/notifications"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hub.On<string, string, string?>("Notification", (type, message, ticketId) =>
+        {
+            var (css, icon) = type switch
+            {
+                "ticket_created" => ("inf", "🎫"),
+                "escalation" => ("wrn", "▲"),
+                "sla_breach" => ("err", "⏰"),
+                "resolved" => ("suc", "✓"),
+                _ => ("inf", "ℹ")
+            };
+            Show(message, css, icon, ticketId);
+        });
+
+        _hub.On<string>("SLABreach", ticketId =>
+        {
+            Show($"SLA Breach: {ticketId}", "err", "🔴", ticketId);
+        });
+
+        try { await _hub.StartAsync(); }
+        catch { /* Hub not available yet during SSR prerender */ }
+    }
+
+    public void Show(string message, string type = "inf", string icon = "ℹ", string? ticketId = null)
+    {
+        InvokeAsync(() =>
+        {
+            _toasts.Add(new ToastItem(message, type, icon, ticketId));
+            StateHasChanged();
+            _ = RemoveAfterDelay(_toasts.Last());
+        });
+    }
+
+    private void OnToastClick(ToastItem item)
+    {
+        if (item.TicketId != null)
+            Nav.NavigateTo($"incidents");
+        _toasts.Remove(item);
     }
 
     private async Task RemoveAfterDelay(ToastItem item)
     {
-        await Task.Delay(3000);
-        _toasts.Remove(item);
-        StateHasChanged();
+        await Task.Delay(5000);
+        await InvokeAsync(() =>
+        {
+            _toasts.Remove(item);
+            StateHasChanged();
+        });
     }
 
-    private record ToastItem(string Message, string Type)
+    public async ValueTask DisposeAsync()
     {
-        public string CssClass => Type switch
-        {
-            "suc" => "suc",
-            "err" => "err",
-            "wrn" => "wrn",
-            _ => "inf"
-        };
+        if (_hub is not null) await _hub.DisposeAsync();
+    }
+
+    private record ToastItem(string Message, string Type, string Icon = "ℹ", string? TicketId = null)
+    {
+        public string CssClass => Type switch { "suc" => "suc", "err" => "err", "wrn" => "wrn", _ => "inf" };
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using NexusITSM.Components;
 using NexusITSM.Data;
+using NexusITSM.Hubs;
 using NexusITSM.Models.Entities;
 using NexusITSM.Services;
 
@@ -31,6 +32,11 @@ builder.Services.ConfigureApplicationCookie(options =>
 // Services
 builder.Services.AddSingleton<DemoDataService>();
 builder.Services.AddScoped<TicketService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddHostedService<SlaBackgroundService>();
+
+// SignalR
+builder.Services.AddSignalR();
 
 // Blazor
 builder.Services.AddRazorComponents()
@@ -53,6 +59,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapAuthEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

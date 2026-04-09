@@ -8,9 +8,14 @@ namespace NexusITSM.Services;
 public class TicketService
 {
     private readonly AppDbContext _db;
+    private readonly NotificationService? _notify;
     private static int _seq = 1020;
 
-    public TicketService(AppDbContext db) => _db = db;
+    public TicketService(AppDbContext db, NotificationService? notify = null)
+    {
+        _db = db;
+        _notify = notify;
+    }
 
     public async Task<List<Ticket>> GetAllAsync() =>
         await _db.Tickets
@@ -58,6 +63,7 @@ public class TicketService
             CreatedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
+        if (_notify != null) await _notify.NotifyTicketCreated(ticket.Id, ticket.Title);
         return ticket;
     }
 
@@ -79,6 +85,8 @@ public class TicketService
             CreatedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
+        if (_notify != null && newStatus == TicketStatus.Resolved)
+            await _notify.NotifyTicketResolved(ticketId, ticket.Title);
     }
 
     public async Task EscalateAsync(string ticketId, string actor)
@@ -101,6 +109,7 @@ public class TicketService
             CreatedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
+        if (_notify != null) await _notify.NotifyTicketEscalated(ticketId, ticket.Title);
     }
 
     public async Task AddNoteAsync(string ticketId, string actor, string note)
