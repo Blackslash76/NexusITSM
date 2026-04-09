@@ -96,19 +96,21 @@
                 var to = CanvasNodes.FirstOrDefault(n => n.Id == conn.ToId);
                 if (from != null && to != null)
                 {
-                    var x1 = from.X + 80;
-                    var y1 = from.Y + 25;
-                    var x2 = to.X + 80;
-                    var y2 = to.Y + 25;
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    var x1 = (int)(from.X + 80);
+                    var y1 = (int)(from.Y + 25);
+                    var x2 = (int)(to.X + 80);
+                    var y2 = (int)(to.Y + 25);
                     var cx = (x1 + x2) / 2;
-                    <path d="M @x1 @y1 C @cx @y1, @cx @y2, @x2 @y2"
+                    var ly = (y1 + y2) / 2 - 6;
+                    <path d="@($"M {x1} {y1} C {cx} {y1}, {cx} {y2}, {x2} {y2}")"
                           data-from="@conn.FromId" data-to="@conn.ToId"
                           fill="none" stroke="@from.Color" stroke-width="2" stroke-dasharray="@(conn.Label == "no" ? "5,3" : "none")" opacity="0.6"
                           style="pointer-events:none" />
                     <circle cx="@x2" cy="@y2" r="3" fill="@from.Color" opacity="0.8" style="pointer-events:none" />
                     @if (!string.IsNullOrEmpty(conn.Label))
                     {
-                        @((MarkupString)$"""<text x="{cx}" y="{(y1+y2)/2 - 6}" fill="var(--t4)" font-size="9" text-anchor="middle" style="pointer-events:none">{conn.Label}</text>""")
+                        @((MarkupString)$"""<text x="{cx}" y="{ly}" fill="var(--t4)" font-size="9" text-anchor="middle" style="pointer-events:none">{conn.Label}</text>""")
                     }
                 }
             }
@@ -119,7 +121,7 @@
         {
             <div class="wf-node @(SelectedNode?.Id == node.Id ? "selected" : "")"
                  data-node-id="@node.Id"
-                 style="position:absolute;left:@(node.X)px;top:@(node.Y)px;width:160px;padding:10px 12px;background:var(--bg2);border:1px solid @(SelectedNode?.Id == node.Id ? node.Color : "var(--bdr)");border-radius:8px;cursor:move;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.2)"
+                 style="position:absolute;left:@((int)node.X)px;top:@((int)node.Y)px;width:160px;padding:10px 12px;background:var(--bg2);border:1px solid @(SelectedNode?.Id == node.Id ? node.Color : "var(--bdr)");border-radius:8px;cursor:move;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.2)"
                  @onclick="() => SelectNode(node)">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
                     <span style="font-size:14px">@node.Icon</span>

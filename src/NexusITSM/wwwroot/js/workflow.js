@@ -22,21 +22,19 @@ window.workflowInterop = {
         document.addEventListener('mousemove', (e) => {
             if (!dragNode) return;
             const canvasRect = canvas.getBoundingClientRect();
-            const x = Math.max(0, Math.min(canvasRect.width - 160, e.clientX - canvasRect.left - offsetX));
-            const y = Math.max(0, Math.min(canvasRect.height - 50, e.clientY - canvasRect.top - offsetY));
+            const x = Math.max(0, Math.min(canvasRect.width - 170, e.clientX - canvasRect.left - offsetX));
+            const y = Math.max(0, Math.min(canvasRect.height - 60, e.clientY - canvasRect.top - offsetY));
             dragNode.style.left = x + 'px';
             dragNode.style.top = y + 'px';
-
-            // Update SVG connections in real-time
-            updateConnections(canvas);
+            updateAllConnections();
             e.preventDefault();
         });
 
         document.addEventListener('mouseup', (e) => {
             if (!dragNode) return;
             const canvasRect = canvas.getBoundingClientRect();
-            const x = Math.max(0, Math.min(canvasRect.width - 160, e.clientX - canvasRect.left - offsetX));
-            const y = Math.max(0, Math.min(canvasRect.height - 50, e.clientY - canvasRect.top - offsetY));
+            const x = Math.max(0, Math.min(canvasRect.width - 170, e.clientX - canvasRect.left - offsetX));
+            const y = Math.max(0, Math.min(canvasRect.height - 60, e.clientY - canvasRect.top - offsetY));
             const nodeId = dragNode.dataset.nodeId;
             dragNode.style.zIndex = '2';
             dragNode.style.opacity = '1';
@@ -59,53 +57,43 @@ window.workflowInterop = {
     }
 };
 
-function updateConnections(canvas) {
-    const svg = canvas.querySelector('svg');
-    if (!svg) return;
+function updateAllConnections() {
+    const canvas = document.getElementById('wf-canvas');
+    if (!canvas) return;
 
-    const nodes = canvas.querySelectorAll('.wf-node');
+    // Build map of node positions from actual DOM
     const nodeMap = {};
-    nodes.forEach(n => {
+    canvas.querySelectorAll('.wf-node').forEach(n => {
         const id = n.dataset.nodeId;
         if (id) {
             nodeMap[id] = {
-                x: parseFloat(n.style.left) || 0,
-                y: parseFloat(n.style.top) || 0,
-                w: n.offsetWidth || 160,
-                h: n.offsetHeight || 50
+                cx: (parseFloat(n.style.left) || 0) + (n.offsetWidth / 2),
+                cy: (parseFloat(n.style.top) || 0) + (n.offsetHeight / 2)
             };
         }
     });
 
-    // Update all path and circle elements that represent connections
-    const paths = svg.querySelectorAll('path[data-from]');
-    paths.forEach(path => {
-        const fromId = path.dataset.from;
-        const toId = path.dataset.to;
-        const from = nodeMap[fromId];
-        const to = nodeMap[toId];
+    // Update every connection path
+    canvas.querySelectorAll('path[data-from]').forEach(path => {
+        const from = nodeMap[path.dataset.from];
+        const to = nodeMap[path.dataset.to];
         if (!from || !to) return;
 
-        const x1 = from.x + from.w / 2;
-        const y1 = from.y + from.h / 2;
-        const x2 = to.x + to.w / 2;
-        const y2 = to.y + to.h / 2;
-        const cx = (x1 + x2) / 2;
+        const mx = (from.cx + to.cx) / 2;
+        path.setAttribute('d', `M ${from.cx} ${from.cy} C ${mx} ${from.cy}, ${mx} ${to.cy}, ${to.cx} ${to.cy}`);
 
-        path.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`);
-
-        // Update arrow circle
+        // Update the arrow dot (next sibling circle)
         const circle = path.nextElementSibling;
         if (circle && circle.tagName === 'circle') {
-            circle.setAttribute('cx', x2);
-            circle.setAttribute('cy', y2);
+            circle.setAttribute('cx', to.cx);
+            circle.setAttribute('cy', to.cy);
         }
 
-        // Update label
+        // Update the label (sibling after circle)
         const label = circle ? circle.nextElementSibling : null;
         if (label && label.tagName === 'text') {
-            label.setAttribute('x', cx);
-            label.setAttribute('y', (y1 + y2) / 2 - 6);
+            label.setAttribute('x', mx);
+            label.setAttribute('y', (from.cy + to.cy) / 2 - 8);
         }
     });
 }
