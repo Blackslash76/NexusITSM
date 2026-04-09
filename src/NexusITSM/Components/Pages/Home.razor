@@ -1,5 +1,8 @@
 @page "/"
+@attribute [Authorize]
+@inject NexusITSM.Data.AppDbContext Db
 @inject NexusITSM.Services.DemoDataService Data
+@using Microsoft.EntityFrameworkCore
 
 <PageTitle>Dashboard — NexusITSM</PageTitle>
 
@@ -145,23 +148,37 @@
     private List<Problem> OpenProblems = [];
     private List<Change> UpcomingChanges = [];
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        var active = Data.Tickets.Where(t => t.Status != TicketStatus.Closed).ToList();
+        var active = await Db.Tickets
+            .Include(t => t.Assignee)
+            .Where(t => t.Status != TicketStatus.Closed)
+            .ToListAsync();
+
         OpenCount = active.Count(t => t.Status == TicketStatus.Open);
         InProgressCount = active.Count(t => t.Status == TicketStatus.InProgress);
         SlaBreachCount = active.Count(t => t.SlaStatus == SlaStatus.Breach);
         EscalatedCount = active.Count(t => t.Status == TicketStatus.Escalated);
-        ResolvedToday = Data.Tickets.Count(t => t.Status == TicketStatus.Resolved);
+        ResolvedToday = await Db.Tickets.CountAsync(t => t.Status == TicketStatus.Resolved);
         SlaCompliancePct = active.Count > 0 ? 100 - (SlaBreachCount * 100 / active.Count) : 100;
 
-        RecentTickets = active.Take(7).ToList();
-        OpenProblems = Data.Problems;
-        UpcomingChanges = Data.Changes.OrderBy(c => c.CabDate).Take(4).ToList();
+        RecentTickets = active.OrderByDescending(t => t.CreatedAt).Take(7).ToList();
 
-        GroupWorkloads = Data.Groups.Select(g => new GroupWorkload(
+        OpenProblems = await Db.Problems
+            .Include(p => p.Incidents)
+            .Where(p => p.Status != ProblemStatus.Closed && p.Status != ProblemStatus.Resolved)
+            .ToListAsync();
+
+        UpcomingChanges = await Db.Changes
+            .Where(c => c.CabDate != null)
+            .OrderBy(c => c.CabDate)
+            .Take(4)
+            .ToListAsync();
+
+        var groups = await Db.SupportGroups.ToListAsync();
+        GroupWorkloads = groups.Select(g => new GroupWorkload(
             g.Name, g.Icon, g.Color, g.Level.ToString(),
-            Data.Tickets.Count(t => t.GroupId == g.Id && t.Status != TicketStatus.Closed && t.Status != TicketStatus.Resolved)
+            active.Count(t => t.GroupId == g.Id && t.Status != TicketStatus.Resolved)
         )).ToList();
 
         CategoryCounts = active.GroupBy(t => t.Category)

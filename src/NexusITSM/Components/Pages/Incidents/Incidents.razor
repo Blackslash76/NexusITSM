@@ -1,6 +1,10 @@
 @page "/incidents"
+@attribute [Authorize]
+@inject NexusITSM.Services.TicketService TicketSvc
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Data.AppDbContext Db
 @inject NavigationManager Nav
+@using Microsoft.EntityFrameworkCore
 
 <PageTitle>Incidents — NexusITSM</PageTitle>
 
@@ -183,6 +187,7 @@ else
     private string FilterPriority = "";
     private string SearchQuery = "";
     private Ticket? SelectedTicket;
+    private List<Ticket> AllTickets = [];
 
     // New ticket form
     private bool ShowNewTicket;
@@ -193,7 +198,12 @@ else
     private string NewDept = "";
     private string NewDescription = "";
 
-    private IEnumerable<Ticket> Filtered => Data.Tickets.Where(t =>
+    protected override async Task OnInitializedAsync()
+    {
+        AllTickets = await TicketSvc.GetAllAsync();
+    }
+
+    private IEnumerable<Ticket> Filtered => AllTickets.Where(t =>
     {
         if (!string.IsNullOrEmpty(FilterStatus) && t.Status.ToString() != FilterStatus) return false;
         if (!string.IsNullOrEmpty(FilterPriority) && t.Priority.ToString() != FilterPriority) return false;
@@ -216,63 +226,49 @@ else
     private void OnFilterPriority(ChangeEventArgs e) => FilterPriority = e.Value?.ToString() ?? "";
     private void CloseNewTicket() => ShowNewTicket = false;
 
-    private void SelectTicket(Ticket t)
+    private async Task SelectTicketAsync(Ticket t)
     {
-        SelectedTicket = t;
+        SelectedTicket = await TicketSvc.GetByIdAsync(t.Id);
         if (View == "kanban") View = "list";
     }
 
-    private void EscalateTicket(Ticket t) => HandleEscalate(t);
+    private void SelectTicket(Ticket t) => _ = SelectTicketAsync(t);
 
-    private void HandleStatusChange((Ticket ticket, TicketStatus newStatus) args)
+    private void EscalateTicket(Ticket t) => _ = HandleEscalateAsync(t);
+
+    private async Task HandleStatusChange((Ticket ticket, TicketStatus newStatus) args)
     {
-        args.ticket.Status = args.newStatus;
-        if (args.newStatus == TicketStatus.Resolved) args.ticket.ResolvedAt = DateTime.UtcNow;
-        if (args.newStatus == TicketStatus.Closed) args.ticket.ClosedAt = DateTime.UtcNow;
-        args.ticket.Timeline.Add(new TimelineEvent
-        {
-            Type = args.newStatus == TicketStatus.Resolved ? TimelineEventType.Resolved : TimelineEventType.StatusChanged,
-            Actor = "Admin Marco", Message = $"Status aggiornato: {FormatStatus(args.newStatus)}", CreatedAt = DateTime.UtcNow
-        });
+        await TicketSvc.UpdateStatusAsync(args.ticket.Id, args.newStatus, "Admin");
+        AllTickets = await TicketSvc.GetAllAsync();
+        SelectedTicket = await TicketSvc.GetByIdAsync(args.ticket.Id);
     }
 
-    private void HandleEscalate(Ticket t)
+    private async Task HandleEscalateAsync(Ticket t)
     {
-        t.EscalationLevel = t.EscalationLevel < EscalationLevel.L3 ? t.EscalationLevel + 1 : t.EscalationLevel;
-        t.Status = TicketStatus.Escalated;
-        t.IsEscalated = true;
-        var levels = new[] { "", "L1 Support", "L2 Engineering", "Management" };
-        t.Timeline.Add(new TimelineEvent
-        {
-            Type = TimelineEventType.Escalated, Actor = "Admin Marco",
-            Message = $"Escalation manuale a {levels[(int)t.EscalationLevel]}", CreatedAt = DateTime.UtcNow
-        });
+        await TicketSvc.EscalateAsync(t.Id, "Admin");
+        AllTickets = await TicketSvc.GetAllAsync();
+        SelectedTicket = await TicketSvc.GetByIdAsync(t.Id);
     }
 
-    private void HandleNoteAdded((Ticket ticket, string note) args)
+    private void HandleEscalate(Ticket t) => _ = HandleEscalateAsync(t);
+
+    private async Task HandleNoteAdded((Ticket ticket, string note) args)
     {
-        args.ticket.Timeline.Add(new TimelineEvent
-        {
-            Type = TimelineEventType.Note, Actor = "Admin Marco", Message = args.note, CreatedAt = DateTime.UtcNow
-        });
+        await TicketSvc.AddNoteAsync(args.ticket.Id, "Admin", args.note);
+        SelectedTicket = await TicketSvc.GetByIdAsync(args.ticket.Id);
     }
 
-    private void CreateTicket()
+    private async Task CreateTicket()
     {
         if (string.IsNullOrWhiteSpace(NewTitle)) return;
-        var agent = Data.Agents[1]; // Sara Bianchi (L1) default
-        var group = Data.Groups[0]; // L1 Help Desk default
-        var ticket = new Ticket
+        var defaultGroup = await Db.SupportGroups.FirstOrDefaultAsync(g => g.Level == GroupLevel.L1);
+        var ticket = await TicketSvc.CreateAsync(new Ticket
         {
-            Id = Data.NextTicketId(), Title = NewTitle, Priority = NewPriority, Category = NewCategory,
-            Status = TicketStatus.Open, Requester = NewRequester, Department = NewDept,
-            Description = NewDescription, Assignee = agent, AssigneeId = agent.Id,
-            Group = group, GroupId = group.Id, CreatedAt = DateTime.UtcNow,
-            SlaBreachAt = DateTime.UtcNow.AddHours(NewPriority switch { TicketPriority.Critical => 2, TicketPriority.High => 4, TicketPriority.Medium => 8, _ => 24 }),
-            SlaPercent = 0, SlaStatus = SlaStatus.Ok, Tags = [],
-            Timeline = [ new() { Type = TimelineEventType.Created, Actor = NewRequester, Message = NewDescription, CreatedAt = DateTime.UtcNow } ]
-        };
-        Data.Tickets.Insert(0, ticket);
+            Title = NewTitle, Priority = NewPriority, Category = NewCategory,
+            Requester = NewRequester, Department = NewDept, Description = NewDescription,
+            GroupId = defaultGroup?.Id, Tags = []
+        });
+        AllTickets = await TicketSvc.GetAllAsync();
         ShowNewTicket = false;
         SelectedTicket = ticket;
         NewTitle = ""; NewDescription = ""; NewRequester = ""; NewDept = "";
