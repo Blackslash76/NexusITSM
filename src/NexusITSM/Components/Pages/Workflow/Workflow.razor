@@ -102,6 +102,7 @@
                     var y2 = to.Y + 25;
                     var cx = (x1 + x2) / 2;
                     <path d="M @x1 @y1 C @cx @y1, @cx @y2, @x2 @y2"
+                          data-from="@conn.FromId" data-to="@conn.ToId"
                           fill="none" stroke="@from.Color" stroke-width="2" stroke-dasharray="@(conn.Label == "no" ? "5,3" : "none")" opacity="0.6"
                           style="pointer-events:none" />
                     <circle cx="@x2" cy="@y2" r="3" fill="@from.Color" opacity="0.8" style="pointer-events:none" />
