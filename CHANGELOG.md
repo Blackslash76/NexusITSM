@@ -2,6 +2,18 @@
 
 All notable changes to NexusITSM will be documented in this file.
 
+## [1.1.0] - 2026-04-09
+
+### Added — Full DB Persistence + Docker + Tests
+- ProblemService, ChangeService, CmdbService, GroupService — full DB CRUD
+- All 12 remaining modules refactored from DemoDataService to PostgreSQL
+- 12 new tests (ProblemService, ChangeService, CmdbService) — total: 34 passing
+- Dockerfile (multi-stage, .NET 9, production-ready)
+- docker-compose.yml (app + PostgreSQL 16, healthcheck, volume)
+
+### Fixed
+- Workflow Builder: JS interop for real-time drag, culture-independent SVG coordinates
+
 ## [1.0.0] - 2026-04-09
 
 ### Added — Sprint 8: Enterprise

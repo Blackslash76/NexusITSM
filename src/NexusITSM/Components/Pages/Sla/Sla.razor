@@ -1,6 +1,8 @@
 @page "/sla"
 @attribute [Authorize]
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Data.AppDbContext Db
+@using Microsoft.EntityFrameworkCore
 
 <PageTitle>SLA Engine — NexusITSM</PageTitle>
 
@@ -127,25 +129,32 @@
         new() { Name = "Low Routine",        Priority = TicketPriority.Low,      ResponseTime = "4 h",    ResolutionTime = "24 h" },
     ];
 
-    private List<Ticket> ActiveTickets => Data.Tickets
+    private List<Ticket> AllTickets = [];
+
+    private List<Ticket> ActiveTickets => AllTickets
         .Where(t => t.Status != TicketStatus.Closed && t.Status != TicketStatus.Resolved)
         .OrderByDescending(t => t.SlaPercent)
         .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllTickets = await Db.Tickets.Include(t => t.Assignee).ToListAsync();
+    }
 
     private string CompliancePercent
     {
         get
         {
-            var total = Data.Tickets.Count;
+            var total = AllTickets.Count;
             if (total == 0) return "—";
-            var ok = Data.Tickets.Count(t => t.SlaStatus != SlaStatus.Breach);
+            var ok = AllTickets.Count(t => t.SlaStatus != SlaStatus.Breach);
             return $"{ok * 100 / total}%";
         }
     }
 
     private int ActiveSlaCount => ActiveTickets.Count;
 
-    private int BreachesToday => Data.Tickets.Count(t =>
+    private int BreachesToday => AllTickets.Count(t =>
         t.SlaStatus == SlaStatus.Breach &&
         t.SlaBreachAt.Date == DateTime.UtcNow.Date);
 
@@ -153,7 +162,7 @@
     {
         get
         {
-            var resolved = Data.Tickets.Where(t => t.ResolvedAt.HasValue).ToList();
+            var resolved = AllTickets.Where(t => t.ResolvedAt.HasValue).ToList();
             if (!resolved.Any()) return "—";
             var avg = resolved.Average(t => (t.ResolvedAt!.Value - t.CreatedAt).TotalHours);
             return avg < 1 ? $"{(int)(avg * 60)}m" : $"{avg:F1}h";

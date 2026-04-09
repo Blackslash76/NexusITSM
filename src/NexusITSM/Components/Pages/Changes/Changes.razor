@@ -1,6 +1,9 @@
 @page "/changes"
 @attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Services.ChangeService ChangeSvc
+@inject NexusITSM.Services.GroupService GroupSvc
 
 <PageTitle>Changes — NexusITSM</PageTitle>
 
@@ -38,19 +41,19 @@
 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto">
         <span style="font-size:11px;color:var(--t3)">Totale RFC</span>
-        <span style="font-size:18px;font-weight:700;color:var(--t1)">@Data.Changes.Count</span>
+        <span style="font-size:18px;font-weight:700;color:var(--t1)">@AllChanges.Count</span>
     </div>
     <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto;border-left:3px solid #FF4D6D">
         <span style="font-size:11px;color:var(--t3)">Emergency</span>
-        <span style="font-size:18px;font-weight:700;color:#FF4D6D">@Data.Changes.Count(c => c.Type == ChangeType.Emergency)</span>
+        <span style="font-size:18px;font-weight:700;color:#FF4D6D">@AllChanges.Count(c => c.Type == ChangeType.Emergency)</span>
     </div>
     <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto;border-left:3px solid #C97BFF">
         <span style="font-size:11px;color:var(--t3)">CAB Pending</span>
-        <span style="font-size:18px;font-weight:700;color:#C97BFF">@Data.Changes.Count(c => c.Status == ChangeStatus.PendingCAB)</span>
+        <span style="font-size:18px;font-weight:700;color:#C97BFF">@AllChanges.Count(c => c.Status == ChangeStatus.PendingCAB)</span>
     </div>
     <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto;border-left:3px solid var(--acc3)">
         <span style="font-size:11px;color:var(--t3)">Approvate</span>
-        <span style="font-size:18px;font-weight:700;color:var(--acc3)">@Data.Changes.Count(c => c.Status == ChangeStatus.Approved)</span>
+        <span style="font-size:18px;font-weight:700;color:var(--acc3)">@AllChanges.Count(c => c.Status == ChangeStatus.Approved)</span>
     </div>
 </div>
 
@@ -150,7 +153,7 @@
                             var colVal = col;
                             var score = rowVal * colVal;
                             var bg = MatrixCellBg(score);
-                            var hasChange = Data.Changes.Any(c => c.Risk == colVal && c.Impact == rowVal);
+                            var hasChange = AllChanges.Any(c => c.Risk == colVal && c.Impact == rowVal);
                             <div class="risk-cell" style="background:@bg;height:32px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:rgba(255,255,255,.85);position:relative"
                                  title="Impatto @colVal x Probabilita @rowVal = @score">
                                 @score
@@ -258,7 +261,7 @@
             <label class="fl">Assegnato a</label>
             <select class="fi" @bind="NewAssigneeId">
                 <option value="">— Seleziona agente —</option>
-                @foreach (var a in Data.Agents)
+                @foreach (var a in AllAgents)
                 {
                     <option value="@a.Id">@a.FullName</option>
                 }
@@ -283,7 +286,7 @@
 <!-- ═══════════════════════════════════════════════
      CHANGE DETAIL MODAL
 ════════════════════════════════════════════════ -->
-<Modal IsOpen="ShowDetail" Title="@(DetailChange != null ? DetailChange.Id + " — Dettaglio RFC" : "Dettaglio RFC")" Size="xl" OnClose="() => ShowDetail = false">
+<Modal IsOpen="ShowDetail" Title="@(DetailChange != null ? DetailChange.Id + " — Dettaglio RFC" : "Dettaglio RFC")" Size="xl" OnClose="CloseDetail">
     @if (DetailChange != null)
     {
         <!-- Tabs nav -->
@@ -421,19 +424,19 @@
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
                 <button class="btn" style="background:rgba(48,196,141,.15);color:#30C48D;border-color:rgba(48,196,141,.3)"
-                        @onclick="() => { DetailChange.Status = ChangeStatus.Approved; }">
+                        @onclick="SetStatusApproved">
                     Approva
                 </button>
                 <button class="btn" style="background:rgba(255,77,109,.1);color:#FF4D6D;border-color:rgba(255,77,109,.3)"
-                        @onclick="() => { DetailChange.Status = ChangeStatus.Rejected; }">
+                        @onclick="SetStatusRejected">
                     Rifiuta
                 </button>
                 <button class="btn" style="background:rgba(255,176,32,.1);color:#FFB020;border-color:rgba(255,176,32,.3)"
-                        @onclick="() => { DetailChange.Status = ChangeStatus.PendingCAB; }">
+                        @onclick="SetStatusPendingCAB">
                     Rimanda a CAB
                 </button>
                 <button class="btn" style="background:rgba(75,158,255,.1);color:#4B9EFF;border-color:rgba(75,158,255,.3)"
-                        @onclick="() => { DetailChange.Status = ChangeStatus.Scheduled; }">
+                        @onclick="SetStatusScheduled">
                     Pianifica
                 </button>
             </div>
@@ -441,7 +444,7 @@
                 Change Advisory Board
             </div>
             <div style="display:flex;flex-direction:column;gap:8px">
-                @foreach (var agent in Data.Agents)
+                @foreach (var agent in AllAgents)
                 {
                     <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--r);background:var(--bg2)">
                         <div style="width:28px;height:28px;border-radius:50%;background:@agent.Color;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;flex-shrink:0">@agent.Initials</div>
@@ -457,13 +460,29 @@
 
         <!-- Footer actions -->
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:12px;border-top:1px solid var(--bdr)">
-            <button class="btn" @onclick="() => ShowDetail = false">Chiudi</button>
-            <button class="btn pri" @onclick="() => ShowDetail = false">Salva modifiche</button>
+            <button class="btn" @onclick="CloseDetail">Chiudi</button>
+            <button class="btn pri" @onclick="SaveDetail">Salva modifiche</button>
         </div>
     }
 </Modal>
 
 @code {
+    // ── DB-backed lists ───────────────────────────────────────────────────────
+    private List<Change>  AllChanges = [];
+    private List<AppUser> AllAgents  = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllChanges = await ChangeSvc.GetAllAsync();
+        AllAgents  = await GroupSvc.GetAgentsAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        AllChanges = await ChangeSvc.GetAllAsync();
+        AllAgents  = await GroupSvc.GetAgentsAsync();
+    }
+
     // ── State ────────────────────────────────────────────────────────────────
     private string SearchQuery  = "";
     private string FilterType   = "";
@@ -489,7 +508,7 @@
     private string  DetailTab    = "dettagli";
 
     // ── Computed ─────────────────────────────────────────────────────────────
-    private IEnumerable<Change> Filtered => Data.Changes.Where(c =>
+    private IEnumerable<Change> Filtered => AllChanges.Where(c =>
     {
         if (!string.IsNullOrEmpty(FilterType)   && c.Type.ToString()   != FilterType)   return false;
         if (!string.IsNullOrEmpty(FilterStatus) && c.Status.ToString() != FilterStatus) return false;
@@ -500,9 +519,9 @@
     });
 
     private List<Change> CabChanges =>
-        Data.Changes.Where(c => c.CabDate.HasValue)
-                    .OrderBy(c => c.CabDate)
-                    .ToList();
+        AllChanges.Where(c => c.CabDate.HasValue)
+                  .OrderBy(c => c.CabDate)
+                  .ToList();
 
     // ── Tab definitions ───────────────────────────────────────────────────────
     private record TabDef(string Key, string Label);
@@ -603,15 +622,12 @@
         NewCabDate     = null;
     }
 
-    private void CreateChange()
+    private async Task CreateChange()
     {
         if (string.IsNullOrWhiteSpace(NewTitle)) return;
 
-        var seq    = Data.Changes.Count + 1;
-        var agent  = Data.Agents.FirstOrDefault(a => a.Id == NewAssigneeId);
         var change = new Change
         {
-            Id          = $"CHG-{seq:D3}",
             Title       = NewTitle,
             Type        = NewType,
             Status      = ChangeStatus.Draft,
@@ -619,14 +635,13 @@
             Impact      = Math.Clamp(NewImpact, 1, 5),
             Requester   = NewRequester,
             Description = NewDescription,
-            Assignee    = agent,
-            AssigneeId  = agent?.Id,
+            AssigneeId  = string.IsNullOrEmpty(NewAssigneeId) ? null : NewAssigneeId,
             CabDate     = NewCabDate,
-            CreatedAt   = DateTime.UtcNow,
         };
 
-        Data.Changes.Insert(0, change);
+        await ChangeSvc.CreateAsync(change);
         CloseNewChange();
+        await ReloadAsync();
     }
 
     private void OpenDetail(Change c)
@@ -635,4 +650,25 @@
         DetailTab    = "dettagli";
         ShowDetail   = true;
     }
+
+    private void CloseDetail()
+    {
+        ShowDetail   = false;
+        DetailChange = null;
+    }
+
+    private async Task SaveDetail()
+    {
+        if (DetailChange is null) return;
+        await ChangeSvc.UpdateAsync(DetailChange);
+        await ReloadAsync();
+        ShowDetail   = false;
+        DetailChange = null;
+    }
+
+    // ── CAB status named methods ──────────────────────────────────────────────
+    private void SetStatusApproved()    { if (DetailChange is not null) DetailChange.Status = ChangeStatus.Approved; }
+    private void SetStatusRejected()    { if (DetailChange is not null) DetailChange.Status = ChangeStatus.Rejected; }
+    private void SetStatusPendingCAB()  { if (DetailChange is not null) DetailChange.Status = ChangeStatus.PendingCAB; }
+    private void SetStatusScheduled()   { if (DetailChange is not null) DetailChange.Status = ChangeStatus.Scheduled; }
 }

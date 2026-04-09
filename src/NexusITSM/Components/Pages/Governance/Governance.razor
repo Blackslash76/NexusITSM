@@ -1,6 +1,8 @@
 @page "/governance"
 @attribute [Authorize]
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Data.AppDbContext Db
+@using Microsoft.EntityFrameworkCore
 
 @using NexusITSM.Models.Entities
 @using NexusITSM.Models.Enums
@@ -198,6 +200,14 @@
 @code {
     private bool PolicyModalOpen;
     private CompliancePolicy? SelectedPolicy;
+
+    // DB-loaded stats
+    private int TotalTickets;
+
+    protected override async Task OnInitializedAsync()
+    {
+        TotalTickets = await Db.Tickets.CountAsync();
+    }
 
     private string LastAuditDate => DateTime.UtcNow.AddDays(-18).ToString("dd/MM/yyyy");
 

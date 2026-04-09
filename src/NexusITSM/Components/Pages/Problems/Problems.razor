@@ -1,6 +1,9 @@
 @page "/problems"
 @attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Services.ProblemService ProblemSvc
+@inject NexusITSM.Services.GroupService GroupSvc
 
 <PageTitle>Problems — NexusITSM</PageTitle>
 
@@ -100,7 +103,7 @@
 
 <!-- Known Error Database (KEDB) -->
 @{
-    var kedb = Data.Problems.Where(p => p.IsKnownError).ToList();
+    var kedb = AllProblems.Where(p => p.IsKnownError).ToList();
 }
 @if (kedb.Any())
 {
@@ -188,7 +191,7 @@
             <label class="fl">Assegnato a</label>
             <select class="fi" @bind="NewAssigneeId">
                 <option value="">— Nessuno —</option>
-                @foreach (var a in Data.Agents)
+                @foreach (var a in AllAgents)
                 {
                     <option value="@a.Id">@a.FullName</option>
                 }
@@ -370,7 +373,7 @@
                         @foreach (var s in Enum.GetValues<ProblemStatus>())
                         {
                             <button class="btn sm @(SelectedProblem.Status == s ? "pri" : "")"
-                                    @onclick="() => UpdateProblemStatus(s)">
+                                    @onclick="async () => await UpdateProblemStatus(s)">
                                 @ProblemStatusIcon(s) @FormatProblemStatus(s)
                             </button>
                         }
@@ -381,7 +384,7 @@
                     <div style="margin-top:6px">
                         <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);cursor:pointer">
                             <input type="checkbox" checked="@SelectedProblem.IsKnownError"
-                                   @onchange="e => SelectedProblem.IsKnownError = (bool)(e.Value ?? false)" />
+                                   @onchange="async e => { SelectedProblem.IsKnownError = (bool)(e.Value ?? false); await ProblemSvc.UpdateAsync(SelectedProblem); AllProblems = await ProblemSvc.GetAllAsync(); }" />
                             Registra nel Known Error Database (KEDB)
                         </label>
                     </div>
@@ -403,9 +406,18 @@
 }
 
 @code {
+    private List<Problem> AllProblems = [];
+    private List<AppUser> AllAgents = [];
+
     private string SearchQuery = "";
     private string FilterStatus = "";
     private string FilterPriority = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        AllProblems = await ProblemSvc.GetAllAsync();
+        AllAgents   = await GroupSvc.GetAgentsAsync();
+    }
 
     // New problem form
     private bool ShowNewProblem;
@@ -422,11 +434,7 @@
     private string ActiveTab = "Overview";
     private static readonly string[] DetailTabs = ["Overview", "Root Cause Analysis", "Incident Correlati", "Soluzione"];
 
-    // ID sequence
-    private int _probSeq = 2;
-    private string NextProblemId() => $"PRB-{++_probSeq:D3}";
-
-    private IEnumerable<Problem> Filtered => Data.Problems.Where(p =>
+    private IEnumerable<Problem> Filtered => AllProblems.Where(p =>
     {
         if (!string.IsNullOrEmpty(FilterStatus) && p.Status.ToString() != FilterStatus) return false;
         if (!string.IsNullOrEmpty(FilterPriority) && p.Priority.ToString() != FilterPriority) return false;
@@ -454,17 +462,15 @@
 
     private void CloseNewProblem() => ShowNewProblem = false;
 
-    private void CreateProblem()
+    private async Task CreateProblem()
     {
         if (string.IsNullOrWhiteSpace(NewTitle)) return;
-        var assignee = string.IsNullOrEmpty(NewAssigneeId) ? null : Data.Agents.FirstOrDefault(a => a.Id == NewAssigneeId);
+        var assignee = string.IsNullOrEmpty(NewAssigneeId) ? null : AllAgents.FirstOrDefault(a => a.Id == NewAssigneeId);
         var problem = new Problem
         {
-            Id = NextProblemId(),
             Title = NewTitle,
             Priority = NewPriority,
             Status = ProblemStatus.Open,
-            Assignee = assignee,
             AssigneeId = assignee?.Id,
             RootCauseAnalysis = string.IsNullOrWhiteSpace(NewRca) ? null : NewRca,
             Workaround = string.IsNullOrWhiteSpace(NewWorkaround) ? null : NewWorkaround,
@@ -472,20 +478,23 @@
             CreatedAt = DateTime.UtcNow,
             Incidents = []
         };
-        Data.Problems.Insert(0, problem);
+        await ProblemSvc.CreateAsync(problem);
+        AllProblems = await ProblemSvc.GetAllAsync();
         ShowNewProblem = false;
         // Reset form
         NewTitle = ""; NewPriority = TicketPriority.Medium; NewAssigneeId = "";
         NewRca = ""; NewWorkaround = ""; NewIsKnownError = false;
         // Open detail immediately
-        SelectProblem(problem);
+        SelectProblem(AllProblems.First(p => p.Id == problem.Id));
     }
 
-    private void UpdateProblemStatus(ProblemStatus newStatus)
+    private async Task UpdateProblemStatus(ProblemStatus newStatus)
     {
         if (SelectedProblem == null) return;
         SelectedProblem.Status = newStatus;
         if (newStatus == ProblemStatus.KnownError) SelectedProblem.IsKnownError = true;
+        await ProblemSvc.UpdateAsync(SelectedProblem);
+        AllProblems = await ProblemSvc.GetAllAsync();
     }
 
     // ProblemStatus helpers

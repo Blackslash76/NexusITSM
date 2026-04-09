@@ -1,6 +1,8 @@
 @page "/escalation"
 @attribute [Authorize]
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Data.AppDbContext Db
+@using Microsoft.EntityFrameworkCore
 
 <PageTitle>Escalation Matrix — NexusITSM</PageTitle>
 
@@ -335,13 +337,14 @@
 
     /* ── Lifecycle ───────────────────────────────────────────────── */
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        ActiveTickets = Data.Tickets
-            .Where(t => t.Status is not TicketStatus.Resolved and not TicketStatus.Closed)
+        ActiveTickets = await Db.Tickets
+            .Include(t => t.Assignee)
+            .Where(t => t.Status != TicketStatus.Closed && t.Status != TicketStatus.Resolved)
             .OrderBy(t => t.Priority)
             .ThenByDescending(t => t.SlaPercent)
-            .ToList();
+            .ToListAsync();
 
         CriticalTicket = ActiveTickets.FirstOrDefault(t => t.Priority == TicketPriority.Critical);
 

@@ -1,6 +1,8 @@
 @page "/settings"
 @attribute [Authorize]
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Data.AppDbContext Db
+@using Microsoft.EntityFrameworkCore
 
 @using NexusITSM.Models.Entities
 @using NexusITSM.Models.Enums
@@ -163,7 +165,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var g in Data.Groups)
+                    @foreach (var g in Groups)
                     {
                         <tr>
                             <td>
@@ -184,7 +186,7 @@
                                 </div>
                             </td>
                             <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t2)">
-                                @(Data.Agents.Count(a => a.GroupId == g.Id || (g.Name.Contains("L1") && a.Role?.Contains("L1") == true) || (g.Name.Contains("L2") && a.Role?.Contains("L2") == true)))
+                                @g.Members.Count
                             </td>
                             <td style="font-size:11px;color:var(--t4)">
                                 @(string.IsNullOrEmpty(g.Email) ? $"{g.Name.ToLower().Replace(" ", "").Replace("—", "").Trim()}@nexusitsm.local" : g.Email)
@@ -203,6 +205,16 @@
 @code {
     private string ActiveTab = "generale";
     private bool SaveToast;
+
+    // DB-loaded data
+    private List<NexusITSM.Models.Entities.SupportGroup> Groups = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Groups = await Db.SupportGroups
+            .Include(g => g.Members)
+            .ToListAsync();
+    }
 
     // Generale
     private string AppName = "NexusITSM";

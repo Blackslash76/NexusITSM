@@ -1,6 +1,9 @@
 @page "/catalog"
 @attribute [Authorize]
 @inject NexusITSM.Services.DemoDataService Data
+@inject NexusITSM.Data.AppDbContext Db
+@inject NexusITSM.Services.TicketService TicketSvc
+@using Microsoft.EntityFrameworkCore
 
 <PageTitle>Service Catalog — NexusITSM</PageTitle>
 
@@ -77,6 +80,13 @@
         new("📱", "Mobile", "Smartphone, tablet, MDM", "8h", TicketCategory.Mobile),
     ];
 
+    private SupportGroup? DefaultGroup;
+
+    protected override async Task OnInitializedAsync()
+    {
+        DefaultGroup = await Db.SupportGroups.FirstOrDefaultAsync();
+    }
+
     private bool ModalOpen;
     private string ModalTitle = "";
     private ServiceCategory? SelectedCategory;
@@ -107,19 +117,8 @@
     {
         if (string.IsNullOrWhiteSpace(FormTitle) || SelectedCategory == null) return;
 
-        var agent = Data.Agents[1]; // Sara Bianchi — L1 default
-        var group = Data.Groups[0]; // L1 Help Desk default
-        var slaHours = FormPriority switch
-        {
-            TicketPriority.Critical => 2,
-            TicketPriority.High => 4,
-            TicketPriority.Medium => 8,
-            _ => 24
-        };
-
         var ticket = new Ticket
         {
-            Id = Data.NextTicketId(),
             Title = FormTitle,
             Description = FormDescription,
             Priority = FormPriority,
@@ -127,30 +126,13 @@
             Status = TicketStatus.Open,
             Requester = FormRequester,
             Department = FormDepartment,
-            Assignee = agent,
-            AssigneeId = agent.Id,
-            Group = group,
-            GroupId = group.Id,
-            CreatedAt = DateTime.UtcNow,
-            SlaBreachAt = DateTime.UtcNow.AddHours(slaHours),
-            SlaPercent = 0,
-            SlaStatus = SlaStatus.Ok,
+            GroupId = DefaultGroup?.Id,
             Tags = [SelectedCategory.Name.ToLower()],
-            Timeline =
-            [
-                new TimelineEvent
-                {
-                    Type = TimelineEventType.Created,
-                    Actor = string.IsNullOrWhiteSpace(FormRequester) ? "Portale" : FormRequester,
-                    Message = $"Richiesta aperta via Service Catalog — {SelectedCategory.Name}",
-                    CreatedAt = DateTime.UtcNow
-                }
-            ]
         };
 
-        Data.Tickets.Insert(0, ticket);
+        var created = await TicketSvc.CreateAsync(ticket);
         ModalOpen = false;
-        ConfirmMessage = $"Richiesta {ticket.Id} creata con successo";
+        ConfirmMessage = $"Richiesta {created.Id} creata con successo";
         StateHasChanged();
         await Task.Delay(3000);
         ConfirmMessage = null;

@@ -1,7 +1,9 @@
 @page "/portal"
 @attribute [Authorize]
 @inject NexusITSM.Services.DemoDataService Data
-
+@inject NexusITSM.Data.AppDbContext Db
+@inject NexusITSM.Services.TicketService TicketSvc
+@using Microsoft.EntityFrameworkCore
 @using NexusITSM.Models.Entities
 @using NexusITSM.Models.Enums
 @using NexusITSM.Components.Shared
@@ -206,12 +208,22 @@
     private string FormDescription = "";
     private TicketPriority FormPriority = TicketPriority.Medium;
 
-    // Stats
-    private int MyTickets => Data.Tickets.Count;
-    private int WaitingTickets => Data.Tickets.Count(t => t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Open);
-    private int ResolvedTickets => Data.Tickets.Count(t => t.Status == TicketStatus.Resolved || t.Status == TicketStatus.Closed);
+    private List<Ticket> DbTickets = [];
+    private List<Ticket> RecentTickets = [];
 
-    private IEnumerable<Ticket> RecentTickets => Data.Tickets.Take(5);
+    protected override async Task OnInitializedAsync()
+    {
+        RecentTickets = await Db.Tickets
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(5)
+            .ToListAsync();
+        DbTickets = await Db.Tickets.ToListAsync();
+    }
+
+    // Stats
+    private int MyTickets => DbTickets.Count;
+    private int WaitingTickets => DbTickets.Count(t => t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Open);
+    private int ResolvedTickets => DbTickets.Count(t => t.Status == TicketStatus.Resolved || t.Status == TicketStatus.Closed);
 
     private record PortalCat(string Icon, string Name, string Sla);
 
@@ -246,59 +258,40 @@
             FormPriority = p;
     }
 
-    private void SubmitTicket()
+    private async void SubmitTicket()
     {
         if (string.IsNullOrWhiteSpace(FormTitle)) return;
-        var agent = Data.Agents[1];
-        var group = Data.Groups[0];
-        var slaH = FormPriority switch
-        {
-            TicketPriority.Critical => 2,
-            TicketPriority.High => 4,
-            TicketPriority.Medium => 8,
-            _ => 24
-        };
         var catEnum = SelectedCategory switch
         {
-            "Hardware" => TicketCategory.Hardware,
-            "Software" => TicketCategory.Software,
-            "Network" => TicketCategory.Network,
-            "Email" => TicketCategory.Email,
-            "Accessi" => TicketCategory.AccessManagement,
-            "Security" => TicketCategory.Security,
+            "Hardware"  => TicketCategory.Hardware,
+            "Software"  => TicketCategory.Software,
+            "Network"   => TicketCategory.Network,
+            "Email"     => TicketCategory.Email,
+            "Accessi"   => TicketCategory.AccessManagement,
+            "Security"  => TicketCategory.Security,
             "Stampanti" => TicketCategory.Printer,
-            "Mobile" => TicketCategory.Mobile,
-            _ => TicketCategory.Hardware
+            "Mobile"    => TicketCategory.Mobile,
+            _           => TicketCategory.Hardware
         };
         var ticket = new Ticket
         {
-            Id = Data.NextTicketId(),
-            Title = FormTitle,
+            Title       = FormTitle,
             Description = FormDescription,
-            Priority = FormPriority,
-            Category = catEnum,
-            Status = TicketStatus.Open,
-            Requester = "Utente Portale",
-            Department = "Self-Service",
-            Assignee = agent, AssigneeId = agent.Id,
-            Group = group, GroupId = group.Id,
-            CreatedAt = DateTime.UtcNow,
-            SlaBreachAt = DateTime.UtcNow.AddHours(slaH),
-            SlaPercent = 0, SlaStatus = SlaStatus.Ok,
-            Tags = [SelectedCategory.ToLower()],
-            Timeline =
-            [
-                new TimelineEvent
-                {
-                    Type = TimelineEventType.Created,
-                    Actor = "Utente Portale",
-                    Message = $"Richiesta aperta via Portale — {SelectedCategory}",
-                    CreatedAt = DateTime.UtcNow
-                }
-            ]
+            Priority    = FormPriority,
+            Category    = catEnum,
+            Status      = TicketStatus.Open,
+            Requester   = "Utente Portale",
+            Department  = "Self-Service",
+            Tags        = [SelectedCategory.ToLower()],
         };
-        Data.Tickets.Insert(0, ticket);
-        CreatedTicketId = ticket.Id;
+        var created = await TicketSvc.CreateAsync(ticket);
+        CreatedTicketId = created.Id;
+        // Refresh recent tickets and stats
+        RecentTickets = await Db.Tickets
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(5)
+            .ToListAsync();
+        DbTickets = await Db.Tickets.ToListAsync();
         Submitted = true;
         WizardStep = 0;
     }
