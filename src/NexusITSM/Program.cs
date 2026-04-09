@@ -33,6 +33,8 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddSingleton<DemoDataService>();
 builder.Services.AddScoped<TicketService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<ExportService>();
+builder.Services.AddSingleton<EmailGrabberService>();
 builder.Services.AddHostedService<SlaBackgroundService>();
 
 // SignalR
@@ -61,6 +63,7 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapAuthEndpoints();
+app.MapExportEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

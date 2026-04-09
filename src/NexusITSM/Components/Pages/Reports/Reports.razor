@@ -14,7 +14,8 @@
         <div style="font-size:20px;font-weight:700;color:var(--t1)">Reports &amp; Analytics</div>
         <div style="font-size:12px;color:var(--t4);margin-top:3px">Panoramica performance e statistiche ticket</div>
     </div>
-    <button class="btn pri" @onclick="ExportCsv">📥 Esporta CSV</button>
+    <a href="/api/export/tickets/csv" class="btn" style="text-decoration:none">📥 CSV</a>
+    <a href="/api/export/tickets/pdf" class="btn pri" style="text-decoration:none">📄 PDF</a>
 </div>
 
 @if (ToastVisible)

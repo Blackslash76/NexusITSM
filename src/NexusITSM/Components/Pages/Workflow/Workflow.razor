@@ -1,17 +1,319 @@
 @page "/workflow"
 @attribute [Authorize]
+@inject IJSRuntime JS
 
 <PageTitle>Workflow Builder — NexusITSM</PageTitle>
 
-<div style="display:flex;align-items:center;justify-content:center;height:calc(100vh - 120px);flex-direction:column;gap:16px">
-    <div style="width:64px;height:64px;border-radius:16px;background:rgba(75,158,255,.1);border:1px solid rgba(75,158,255,.2);display:flex;align-items:center;justify-content:center;font-size:28px">
-        ⚙
-    </div>
-    <div style="font-size:18px;font-weight:700;color:var(--t1)">Workflow Builder</div>
-    <div style="font-size:12px;color:var(--t4);max-width:300px;text-align:center;line-height:1.6">
-        Modulo in fase di sviluppo. Sarà disponibile nel prossimo sprint.
-    </div>
-    <div style="font-size:10px;font-family:var(--mono);color:var(--t4);padding:4px 10px;background:var(--bg3);border-radius:var(--r)">
-        Sprint 4 — Coming soon
+<!-- Toolbar -->
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <div style="font-size:16px;font-weight:700;color:var(--t1)">Workflow Builder</div>
+    <div style="margin-left:auto;display:flex;gap:6px">
+        <select class="fi" style="padding:5px 10px;font-size:11px;width:auto" @bind="SelectedWorkflow">
+            <option value="auto-escalation">Auto-Escalation SLA</option>
+            <option value="new-ticket">Nuovo Ticket Routing</option>
+            <option value="security-incident">Security Incident</option>
+        </select>
+        <button class="btn" @onclick="ResetCanvas">↺ Reset</button>
+        <button class="btn pri" @onclick="SaveWorkflow">💾 Salva</button>
     </div>
 </div>
+
+<div style="display:grid;grid-template-columns:220px 1fr;gap:12px;height:calc(100vh - 190px)">
+    <!-- Node palette -->
+    <div class="card" style="overflow-y:auto;padding:12px">
+        <div class="card-title" style="font-size:11px">Nodi disponibili</div>
+        @foreach (var node in NodePalette)
+        {
+            <div class="wf-palette-node" draggable="true"
+                 style="padding:8px 10px;background:var(--bg3);border-radius:var(--r);margin-bottom:6px;cursor:grab;border-left:3px solid @node.Color;display:flex;align-items:center;gap:8px"
+                 @ondragstart="() => DraggedNode = node">
+                <span style="font-size:16px">@node.Icon</span>
+                <div>
+                    <div style="font-size:11px;font-weight:600;color:var(--t1)">@node.Label</div>
+                    <div style="font-size:9px;color:var(--t4)">@node.Description</div>
+                </div>
+            </div>
+        }
+
+        <div class="card-title" style="font-size:11px;margin-top:14px">Proprietà</div>
+        @if (SelectedNode != null)
+        {
+            <div style="padding:8px;background:var(--bg3);border-radius:var(--r)">
+                <div style="font-size:10px;color:var(--t4);margin-bottom:4px">Nodo: @SelectedNode.Label</div>
+                <div class="fg" style="margin-bottom:6px">
+                    <label class="fl">Nome</label>
+                    <input class="fi" style="font-size:11px" @bind="SelectedNode.Label" />
+                </div>
+                @if (SelectedNode.Type == "condition")
+                {
+                    <div class="fg" style="margin-bottom:6px">
+                        <label class="fl">Condizione</label>
+                        <select class="fi" style="font-size:11px" @bind="SelectedNode.Condition">
+                            <option value="sla_gt_50">SLA > 50%</option>
+                            <option value="sla_gt_75">SLA > 75%</option>
+                            <option value="sla_breach">SLA Breach</option>
+                            <option value="priority_critical">Priority = Critical</option>
+                            <option value="no_update_4h">Nessun update 4h</option>
+                        </select>
+                    </div>
+                }
+                @if (SelectedNode.Type == "action" || SelectedNode.Type == "notify")
+                {
+                    <div class="fg">
+                        <label class="fl">Destinatario</label>
+                        <input class="fi" style="font-size:11px" @bind="SelectedNode.Target" placeholder="Gruppo o email" />
+                    </div>
+                }
+                <button class="btn dan sm" style="margin-top:8px;width:100%" @onclick="DeleteSelectedNode">🗑 Elimina nodo</button>
+            </div>
+        }
+        else
+        {
+            <div style="font-size:10px;color:var(--t4);padding:8px">Seleziona un nodo per modificare le proprietà</div>
+        }
+    </div>
+
+    <!-- Canvas -->
+    <div class="card" style="padding:0;position:relative;overflow:hidden"
+         @ondrop="HandleDrop" @ondragover:preventDefault="true">
+        <div style="position:absolute;top:8px;left:12px;font-size:9px;font-family:var(--mono);color:var(--t4);z-index:1">
+            @CanvasNodes.Count nodi · @Connections.Count connessioni
+        </div>
+
+        <!-- Grid background -->
+        <svg style="position:absolute;width:100%;height:100%;pointer-events:none">
+            <defs>
+                <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="0.5"/>
+                </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+
+            <!-- Connection lines -->
+            @foreach (var conn in Connections)
+            {
+                var from = CanvasNodes.FirstOrDefault(n => n.Id == conn.FromId);
+                var to = CanvasNodes.FirstOrDefault(n => n.Id == conn.ToId);
+                if (from != null && to != null)
+                {
+                    var x1 = from.X + 80;
+                    var y1 = from.Y + 25;
+                    var x2 = to.X + 80;
+                    var y2 = to.Y + 25;
+                    var cx = (x1 + x2) / 2;
+                    <path d="M @x1 @y1 C @cx @y1, @cx @y2, @x2 @y2"
+                          fill="none" stroke="@from.Color" stroke-width="2" stroke-dasharray="@(conn.Label == "no" ? "5,3" : "none")" opacity="0.6"
+                          style="pointer-events:none" />
+                    <circle cx="@x2" cy="@y2" r="3" fill="@from.Color" opacity="0.8" style="pointer-events:none" />
+                    @if (!string.IsNullOrEmpty(conn.Label))
+                    {
+                        @((MarkupString)$"""<text x="{cx}" y="{(y1+y2)/2 - 6}" fill="var(--t4)" font-size="9" text-anchor="middle" style="pointer-events:none">{conn.Label}</text>""")
+                    }
+                }
+            }
+        </svg>
+
+        <!-- Nodes -->
+        @foreach (var node in CanvasNodes)
+        {
+            <div class="wf-node @(SelectedNode?.Id == node.Id ? "selected" : "")"
+                 style="position:absolute;left:@(node.X)px;top:@(node.Y)px;width:160px;padding:10px 12px;background:var(--bg2);border:1px solid @(SelectedNode?.Id == node.Id ? node.Color : "var(--bdr)");border-radius:8px;cursor:move;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.2)"
+                 @onclick="() => SelectNode(node)"
+                 @onmousedown="e => StartDrag(e, node)">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                    <span style="font-size:14px">@node.Icon</span>
+                    <span style="font-size:11px;font-weight:600;color:@node.Color">@node.Label</span>
+                </div>
+                @if (!string.IsNullOrEmpty(node.Condition))
+                {
+                    <div style="font-size:9px;color:var(--t4);font-family:var(--mono)">if: @node.Condition</div>
+                }
+                @if (!string.IsNullOrEmpty(node.Target))
+                {
+                    <div style="font-size:9px;color:var(--t4)">→ @node.Target</div>
+                }
+                <!-- Connect button -->
+                <div style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:@node.Color;border:2px solid var(--bg2);cursor:crosshair;z-index:3"
+                     @onclick:stopPropagation="true"
+                     @onclick="() => StartConnection(node)"></div>
+            </div>
+        }
+
+        @if (!CanvasNodes.Any())
+        {
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--t4);font-size:12px;flex-direction:column;gap:8px">
+                <span style="font-size:32px;opacity:.3">⚙</span>
+                <span>Trascina i nodi dalla palette per creare il workflow</span>
+            </div>
+        }
+    </div>
+</div>
+
+@if (ShowSaveToast)
+{
+    <div style="position:fixed;bottom:24px;right:24px;background:var(--acc3);color:#000;padding:10px 18px;border-radius:var(--r);font-size:12px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+        ✓ Workflow "@SelectedWorkflow" salvato
+    </div>
+}
+
+@code {
+    private string SelectedWorkflow = "auto-escalation";
+    private WfNode? SelectedNode;
+    private NodeTemplate? DraggedNode;
+    private WfNode? ConnectingFrom;
+    private bool ShowSaveToast;
+    private List<WfNode> CanvasNodes = [];
+    private List<WfConnection> Connections = [];
+
+    // Drag state
+    private bool IsDragging;
+    private WfNode? DragTarget;
+    private double DragOffsetX, DragOffsetY;
+
+    protected override void OnInitialized() => LoadWorkflow();
+
+    private static readonly NodeTemplate[] NodePalette =
+    [
+        new("trigger", "⚡", "Trigger", "Evento che avvia il workflow", "#4B9EFF"),
+        new("condition", "◇", "Condizione", "Verifica una regola IF/THEN", "#FFB020"),
+        new("action", "▶", "Azione", "Esegui un'operazione", "#30C48D"),
+        new("notify", "🔔", "Notifica", "Invia notifica email/push", "#C97BFF"),
+        new("assign", "👤", "Assegna", "Assegna a gruppo/agente", "#FF7846"),
+        new("escalate", "▲", "Escalate", "Scala al livello superiore", "#FF4D6D"),
+        new("delay", "⏱", "Attendi", "Pausa temporizzata", "#4B9EFF"),
+        new("resolve", "✓", "Risolvi", "Chiudi/risolvi il ticket", "#30C48D"),
+    ];
+
+    private void LoadWorkflow()
+    {
+        CanvasNodes.Clear();
+        Connections.Clear();
+
+        if (SelectedWorkflow == "auto-escalation")
+        {
+            CanvasNodes =
+            [
+                new("n1") { Icon = "⚡", Label = "Ticket Creato", Color = "#4B9EFF", Type = "trigger", X = 40, Y = 60 },
+                new("n2") { Icon = "◇", Label = "SLA > 50%?", Color = "#FFB020", Type = "condition", Condition = "sla_gt_50", X = 260, Y = 60 },
+                new("n3") { Icon = "🔔", Label = "Notifica Agente", Color = "#C97BFF", Type = "notify", Target = "Agente assegnato", X = 480, Y = 20 },
+                new("n4") { Icon = "◇", Label = "SLA > 75%?", Color = "#FFB020", Type = "condition", Condition = "sla_gt_75", X = 480, Y = 130 },
+                new("n5") { Icon = "▲", Label = "Escalate L2", Color = "#FF4D6D", Type = "escalate", Target = "L2 — Sistemisti", X = 700, Y = 80 },
+                new("n6") { Icon = "🔔", Label = "Notifica Manager", Color = "#C97BFF", Type = "notify", Target = "IT Manager", X = 700, Y = 190 },
+            ];
+            Connections =
+            [
+                new("n1", "n2", ""),
+                new("n2", "n3", "sì"),
+                new("n2", "n4", "no"),
+                new("n4", "n5", "sì"),
+                new("n4", "n6", "no"),
+            ];
+        }
+        else if (SelectedWorkflow == "new-ticket")
+        {
+            CanvasNodes =
+            [
+                new("n1") { Icon = "⚡", Label = "Nuovo Ticket", Color = "#4B9EFF", Type = "trigger", X = 40, Y = 100 },
+                new("n2") { Icon = "◇", Label = "Priority Critical?", Color = "#FFB020", Type = "condition", Condition = "priority_critical", X = 260, Y = 100 },
+                new("n3") { Icon = "👤", Label = "Assegna L2", Color = "#FF7846", Type = "assign", Target = "L2 — Sistemisti", X = 500, Y = 40 },
+                new("n4") { Icon = "👤", Label = "Assegna L1", Color = "#FF7846", Type = "assign", Target = "L1 — Help Desk", X = 500, Y = 170 },
+                new("n5") { Icon = "🔔", Label = "Notifica Team", Color = "#C97BFF", Type = "notify", Target = "Team di competenza", X = 720, Y = 100 },
+            ];
+            Connections =
+            [
+                new("n1", "n2", ""),
+                new("n2", "n3", "sì"),
+                new("n2", "n4", "no"),
+                new("n3", "n5", ""),
+                new("n4", "n5", ""),
+            ];
+        }
+        else
+        {
+            CanvasNodes =
+            [
+                new("n1") { Icon = "⚡", Label = "Security Alert", Color = "#FF4D6D", Type = "trigger", X = 40, Y = 80 },
+                new("n2") { Icon = "▲", Label = "Escalate SecOps", Color = "#FF4D6D", Type = "escalate", Target = "Security Team", X = 260, Y = 80 },
+                new("n3") { Icon = "🔔", Label = "Notifica CISO", Color = "#C97BFF", Type = "notify", Target = "CISO", X = 480, Y = 40 },
+                new("n4") { Icon = "▶", Label = "Blocca Account", Color = "#30C48D", Type = "action", Target = "Active Directory", X = 480, Y = 150 },
+            ];
+            Connections =
+            [
+                new("n1", "n2", ""),
+                new("n2", "n3", ""),
+                new("n2", "n4", ""),
+            ];
+        }
+    }
+
+    private void HandleDrop()
+    {
+        if (DraggedNode == null) return;
+        var id = $"n{CanvasNodes.Count + 1}_{Guid.NewGuid().ToString()[..4]}";
+        CanvasNodes.Add(new WfNode(id)
+        {
+            Icon = DraggedNode.Icon, Label = DraggedNode.Label,
+            Color = DraggedNode.Color, Type = DraggedNode.Type,
+            X = 300, Y = 150 + CanvasNodes.Count * 30
+        });
+        DraggedNode = null;
+    }
+
+    private void SelectNode(WfNode node) => SelectedNode = node;
+
+    private void DeleteSelectedNode()
+    {
+        if (SelectedNode == null) return;
+        Connections.RemoveAll(c => c.FromId == SelectedNode.Id || c.ToId == SelectedNode.Id);
+        CanvasNodes.Remove(SelectedNode);
+        SelectedNode = null;
+    }
+
+    private void StartConnection(WfNode node)
+    {
+        if (ConnectingFrom == null)
+        {
+            ConnectingFrom = node;
+        }
+        else
+        {
+            if (ConnectingFrom.Id != node.Id)
+                Connections.Add(new WfConnection(ConnectingFrom.Id, node.Id, ""));
+            ConnectingFrom = null;
+        }
+    }
+
+    private void StartDrag(MouseEventArgs e, WfNode node)
+    {
+        DragTarget = node;
+        DragOffsetX = e.ClientX - node.X;
+        DragOffsetY = e.ClientY - node.Y;
+    }
+
+    private void ResetCanvas() => LoadWorkflow();
+
+    private async Task SaveWorkflow()
+    {
+        ShowSaveToast = true;
+        StateHasChanged();
+        await Task.Delay(3000);
+        ShowSaveToast = false;
+    }
+
+    private record NodeTemplate(string Type, string Icon, string Label, string Description, string Color);
+
+    private class WfNode(string id)
+    {
+        public string Id { get; } = id;
+        public string Icon { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string Color { get; set; } = "#4B9EFF";
+        public string Type { get; set; } = "";
+        public string? Condition { get; set; }
+        public string? Target { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+
+    private record WfConnection(string FromId, string ToId, string Label);
+}
