@@ -9,12 +9,14 @@ public class TicketService
 {
     private readonly AppDbContext _db;
     private readonly NotificationService? _notify;
+    private readonly WorkflowEngine? _workflow;
     private static int _seq = 1020;
 
-    public TicketService(AppDbContext db, NotificationService? notify = null)
+    public TicketService(AppDbContext db, NotificationService? notify = null, WorkflowEngine? workflow = null)
     {
         _db = db;
         _notify = notify;
+        _workflow = workflow;
     }
 
     public async Task<List<Ticket>> GetAllAsync() =>
@@ -64,6 +66,7 @@ public class TicketService
         });
         await _db.SaveChangesAsync();
         if (_notify != null) await _notify.NotifyTicketCreated(ticket.Id, ticket.Title);
+        if (_workflow != null) await _workflow.ExecuteOnTicketCreatedAsync(ticket.Id);
         return ticket;
     }
 

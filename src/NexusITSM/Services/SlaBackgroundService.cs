@@ -49,6 +49,7 @@ public class SlaBackgroundService : BackgroundService
             .ToListAsync(ct);
 
         var breachNotifications = new List<string>();
+        var warningTickets = new List<string>();
 
         foreach (var ticket in activeTickets)
         {
@@ -66,15 +67,26 @@ public class SlaBackgroundService : BackgroundService
             ticket.SlaPercent = newPercent;
             ticket.SlaStatus = newStatus;
 
-            // Detect new breaches
+            // Detect new breaches and warnings
             if (newStatus == SlaStatus.Breach && oldStatus != SlaStatus.Breach)
             {
                 breachNotifications.Add(ticket.Id);
                 _logger.LogWarning("SLA BREACH: {TicketId} — {Title}", ticket.Id, ticket.Title);
             }
+            else if (newStatus == SlaStatus.Warning && oldStatus == SlaStatus.Ok)
+            {
+                warningTickets.Add(ticket.Id);
+            }
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Trigger workflow engine for warnings and breaches
+        var workflow = scope.ServiceProvider.GetRequiredService<WorkflowEngine>();
+        foreach (var id in warningTickets)
+            await workflow.ExecuteOnSlaWarningAsync(id);
+        foreach (var id in breachNotifications)
+            await workflow.ExecuteOnSlaBreachAsync(id);
 
         // Send SignalR notifications
         if (breachNotifications.Count > 0)
