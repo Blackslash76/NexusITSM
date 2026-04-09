@@ -74,7 +74,7 @@
     </div>
 
     <!-- Canvas -->
-    <div class="card" style="padding:0;position:relative;overflow:hidden"
+    <div id="wf-canvas" class="card" style="padding:0;position:relative;overflow:hidden"
          @ondrop="HandleDrop" @ondragover:preventDefault="true">
         <div style="position:absolute;top:8px;left:12px;font-size:9px;font-family:var(--mono);color:var(--t4);z-index:1">
             @CanvasNodes.Count nodi · @Connections.Count connessioni
@@ -117,9 +117,9 @@
         @foreach (var node in CanvasNodes)
         {
             <div class="wf-node @(SelectedNode?.Id == node.Id ? "selected" : "")"
+                 data-node-id="@node.Id"
                  style="position:absolute;left:@(node.X)px;top:@(node.Y)px;width:160px;padding:10px 12px;background:var(--bg2);border:1px solid @(SelectedNode?.Id == node.Id ? node.Color : "var(--bdr)");border-radius:8px;cursor:move;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.2)"
-                 @onclick="() => SelectNode(node)"
-                 @onmousedown="e => StartDrag(e, node)">
+                 @onclick="() => SelectNode(node)">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
                     <span style="font-size:14px">@node.Icon</span>
                     <span style="font-size:11px;font-weight:600;color:@node.Color">@node.Label</span>
@@ -156,6 +156,8 @@
     </div>
 }
 
+@implements IAsyncDisposable
+
 @code {
     private string SelectedWorkflow = "auto-escalation";
     private WfNode? SelectedNode;
@@ -164,13 +166,50 @@
     private bool ShowSaveToast;
     private List<WfNode> CanvasNodes = [];
     private List<WfConnection> Connections = [];
-
-    // Drag state
-    private bool IsDragging;
-    private WfNode? DragTarget;
-    private double DragOffsetX, DragOffsetY;
+    private DotNetObjectReference<Workflow>? _dotnetRef;
 
     protected override void OnInitialized() => LoadWorkflow();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotnetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("workflowInterop.initDrag", _dotnetRef);
+        }
+    }
+
+    [JSInvokable]
+    public void OnNodeMoved(string nodeId, int x, int y)
+    {
+        var node = CanvasNodes.FirstOrDefault(n => n.Id == nodeId);
+        if (node != null)
+        {
+            node.X = x;
+            node.Y = y;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public void OnPaletteDrop(int x, int y)
+    {
+        if (DraggedNode == null) return;
+        var id = $"n{CanvasNodes.Count + 1}_{Guid.NewGuid().ToString()[..4]}";
+        CanvasNodes.Add(new WfNode(id)
+        {
+            Icon = DraggedNode.Icon, Label = DraggedNode.Label,
+            Color = DraggedNode.Color, Type = DraggedNode.Type,
+            X = x, Y = y
+        });
+        DraggedNode = null;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _dotnetRef?.Dispose();
+    }
 
     private static readonly NodeTemplate[] NodePalette =
     [
@@ -248,15 +287,7 @@
 
     private void HandleDrop()
     {
-        if (DraggedNode == null) return;
-        var id = $"n{CanvasNodes.Count + 1}_{Guid.NewGuid().ToString()[..4]}";
-        CanvasNodes.Add(new WfNode(id)
-        {
-            Icon = DraggedNode.Icon, Label = DraggedNode.Label,
-            Color = DraggedNode.Color, Type = DraggedNode.Type,
-            X = 300, Y = 150 + CanvasNodes.Count * 30
-        });
-        DraggedNode = null;
+        // Handled by JS interop OnPaletteDrop
     }
 
     private void SelectNode(WfNode node) => SelectedNode = node;
@@ -283,14 +314,11 @@
         }
     }
 
-    private void StartDrag(MouseEventArgs e, WfNode node)
+    private void ResetCanvas()
     {
-        DragTarget = node;
-        DragOffsetX = e.ClientX - node.X;
-        DragOffsetY = e.ClientY - node.Y;
+        LoadWorkflow();
+        _ = JS.InvokeVoidAsync("workflowInterop.initDrag", _dotnetRef);
     }
-
-    private void ResetCanvas() => LoadWorkflow();
 
     private async Task SaveWorkflow()
     {
