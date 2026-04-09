@@ -2,6 +2,23 @@
 
 All notable changes to NexusITSM will be documented in this file.
 
+## [0.6.0] - 2026-04-09
+
+### Added — Sprint 6: Real-time & Background
+- SLA Background Service: recalculates SLA percentages every minute for all active tickets
+- Automatic SLA breach detection with SignalR push notifications
+- SignalR NotificationHub at `/hubs/notifications`
+- NotificationService with typed methods (ticket created, escalated, resolved, SLA breach)
+- Real-time toast notifications: listen on SignalR, clickable (navigates to incidents)
+- Dashboard auto-refresh: reloads data when SLA updates or ticket events arrive via SignalR
+- TicketService now sends push notifications on create/escalate/resolve
+
+### Changed — Sprint 5 completion
+- Dashboard refactored from DemoDataService to PostgreSQL via DbContext
+- Incidents page refactored to use TicketService with full DB persistence
+- All 15 protected pages now require `[Authorize]`
+- Login/Register accessible without authentication
+
 ## [0.5.0] - 2026-04-09
 
 ### Added — Sprint 5: Persistenza & Auth
