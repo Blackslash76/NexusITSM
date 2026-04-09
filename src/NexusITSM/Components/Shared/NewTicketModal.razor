@@ -1,0 +1,197 @@
+@inject NexusITSM.Services.ModalState ModalState
+@inject NexusITSM.Services.TicketService TicketSvc
+@inject NexusITSM.Data.AppDbContext Db
+@inject NavigationManager Nav
+@implements IDisposable
+@using Microsoft.EntityFrameworkCore
+
+<Modal IsOpen="IsOpen" Title="Nuovo Ticket" Size="lg" OnClose="Close">
+    <div class="fgrid c2">
+        <!-- Titolo (full width) -->
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Titolo <span class="req">*</span></label>
+            <input class="fi" @bind="Title" @bind:event="oninput" placeholder="Descrizione breve dell'incidente" />
+            @if (Title.Length >= 8 && SuggestedCategory != null)
+            {
+                <div style="margin-top:6px;padding:8px 10px;background:rgba(75,158,255,.06);border:1px solid rgba(75,158,255,.15);border-radius:var(--r);font-size:10px;color:var(--t3)">
+                    💡 Suggerimento AI: <span style="color:var(--acc);font-weight:600">@SuggestedCategory</span> · Priorità suggerita: <span style="color:var(--acc4);font-weight:600">@SuggestedPriority</span>
+                </div>
+            }
+        </div>
+
+        <!-- Priorità + SLA deadline -->
+        <div class="fg">
+            <label class="fl">Priorità <span class="req">*</span></label>
+            <select class="fi" @bind="Priority">
+                @foreach (var p in Enum.GetValues<TicketPriority>())
+                {
+                    <option value="@p">@((int)p)-@p</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">SLA Deadline</label>
+            <input class="fi" type="text" value="@SlaDeadline" readonly style="color:var(--acc4);font-family:var(--mono)" />
+        </div>
+
+        <!-- Categoria + Assegna a -->
+        <div class="fg">
+            <label class="fl">Categoria</label>
+            <select class="fi" @bind="Category">
+                @foreach (var c in Enum.GetValues<TicketCategory>())
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">Assegna a</label>
+            <select class="fi" @bind="AssigneeId">
+                <option value="">Auto (routing automatico)</option>
+                @foreach (var a in Agents)
+                {
+                    <option value="@a.Id">@a.FullName — @a.Role</option>
+                }
+            </select>
+        </div>
+
+        <!-- Richiedente + Reparto -->
+        <div class="fg">
+            <label class="fl">Richiedente</label>
+            <input class="fi" @bind="Requester" placeholder="Nome o email richiedente" />
+        </div>
+        <div class="fg">
+            <label class="fl">Reparto</label>
+            <select class="fi" @bind="Department">
+                <option value="">Seleziona…</option>
+                @foreach (var d in Departments)
+                {
+                    <option value="@d">@d</option>
+                }
+            </select>
+        </div>
+
+        <!-- Descrizione (full width) -->
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Descrizione</label>
+            <textarea class="fi" @bind="Description" style="min-height:80px" placeholder="Descrivere il problema in dettaglio…"></textarea>
+        </div>
+
+        <!-- Tags + CI correlato -->
+        <div class="fg">
+            <label class="fl">Tags</label>
+            <input class="fi" @bind="TagsInput" placeholder="server, vpn, critical (separati da virgola)" />
+        </div>
+        <div class="fg">
+            <label class="fl">CI Correlato</label>
+            <select class="fi" @bind="RelatedCiId">
+                <option value="">Nessuno</option>
+                @foreach (var ci in CIs)
+                {
+                    <option value="@ci.Id">@ci.Id — @ci.Name (@ci.IpAddress)</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+        <button class="btn" @onclick="Close">Annulla</button>
+        <button class="btn pri" @onclick="Create" disabled="@(string.IsNullOrWhiteSpace(Title))">Crea Ticket</button>
+    </div>
+</Modal>
+
+@code {
+    private bool IsOpen;
+    private string Title = "";
+    private TicketPriority Priority = TicketPriority.Medium;
+    private TicketCategory Category = TicketCategory.Software;
+    private string Requester = "";
+    private string Department = "";
+    private string Description = "";
+    private string AssigneeId = "";
+    private string TagsInput = "";
+    private string RelatedCiId = "";
+
+    private List<AppUser> Agents = [];
+    private List<ConfigurationItem> CIs = [];
+
+    private static readonly string[] Departments = ["IT", "HR", "Finance", "Marketing", "Sales", "Operations", "Legal", "Facilities", "Development", "PMO"];
+
+    private string SlaDeadline => Priority switch
+    {
+        TicketPriority.Critical => DateTime.Now.AddHours(2).ToString("dd/MM HH:mm"),
+        TicketPriority.High => DateTime.Now.AddHours(4).ToString("dd/MM HH:mm"),
+        TicketPriority.Medium => DateTime.Now.AddHours(8).ToString("dd/MM HH:mm"),
+        _ => DateTime.Now.AddHours(24).ToString("dd/MM HH:mm")
+    };
+
+    private string? SuggestedCategory
+    {
+        get
+        {
+            var t = Title.ToLowerInvariant();
+            if (t.Contains("vpn") || t.Contains("network") || t.Contains("wifi")) return "Network";
+            if (t.Contains("email") || t.Contains("outlook") || t.Contains("exchange")) return "Email";
+            if (t.Contains("server") || t.Contains("down")) return "Server";
+            if (t.Contains("password") || t.Contains("account") || t.Contains("access")) return "Access Management";
+            if (t.Contains("printer") || t.Contains("stampante")) return "Printer";
+            if (t.Contains("security") || t.Contains("virus")) return "Security";
+            if (Title.Length >= 8) return "Software";
+            return null;
+        }
+    }
+
+    private string SuggestedPriority
+    {
+        get
+        {
+            var t = Title.ToLowerInvariant();
+            if (t.Contains("urgent") || t.Contains("down") || t.Contains("critical") || t.Contains("breach")) return "Critical";
+            if (t.Contains("slow") || t.Contains("error") || t.Contains("fail")) return "High";
+            return "Medium";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ModalState.OnNewTicketRequested += HandleOpen;
+        Agents = await Db.Users.Where(u => u.IsActive).OrderBy(u => u.FullName).ToListAsync();
+        CIs = await Db.ConfigurationItems.OrderBy(c => c.Name).ToListAsync();
+    }
+
+    private void HandleOpen()
+    {
+        IsOpen = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void Close()
+    {
+        IsOpen = false;
+        Title = ""; Description = ""; Requester = ""; Department = "";
+        AssigneeId = ""; TagsInput = ""; RelatedCiId = "";
+        Priority = TicketPriority.Medium;
+        Category = TicketCategory.Software;
+    }
+
+    private async Task Create()
+    {
+        if (string.IsNullOrWhiteSpace(Title)) return;
+
+        var tags = TagsInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        var ticket = await TicketSvc.CreateAsync(new Ticket
+        {
+            Title = Title, Priority = Priority, Category = Category,
+            Requester = Requester, Department = Department, Description = Description,
+            AssigneeId = string.IsNullOrEmpty(AssigneeId) ? null : AssigneeId,
+            Tags = tags
+        });
+
+        Close();
+        Nav.NavigateTo($"incidents");
+    }
+
+    public void Dispose() => ModalState.OnNewTicketRequested -= HandleOpen;
+}

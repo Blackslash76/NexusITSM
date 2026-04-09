@@ -71,6 +71,7 @@ builder.Services.AddScoped<CmdbService>();
 builder.Services.AddScoped<GroupService>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<ModalState>();
 builder.Services.AddSingleton<EmailGrabberService>();
 builder.Services.AddSingleton<WebhookService>();
 builder.Services.AddSingleton<WorkflowEngine>();
