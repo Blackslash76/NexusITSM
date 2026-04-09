@@ -2,6 +2,18 @@
 
 All notable changes to NexusITSM will be documented in this file.
 
+## [1.2.0] - 2026-04-09
+
+### Added — JWT Auth, Workflow Engine, CI/CD
+- JWT authentication for API: POST `/api/auth/token` returns 24h Bearer token
+- Password reset flow: request token + reset with new password
+- Dual auth scheme: cookie for Blazor UI, JWT Bearer for REST API
+- API returns 401 (not redirect) for unauthenticated API requests
+- WorkflowEngine: auto-routing (category-based), auto-assignment (least-loaded agent), SLA auto-escalation
+- Integrated with TicketService (ticket creation triggers workflow) and SlaBackgroundService (SLA changes trigger escalation)
+- GitHub Actions CI/CD: build + test on push/PR, Docker build verification
+- `.github/workflows/ci.yml`
+
 ## [1.1.0] - 2026-04-09
 
 ### Added — Full DB Persistence + Docker + Tests
