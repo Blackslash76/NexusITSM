@@ -2,6 +2,23 @@
 
 All notable changes to NexusITSM will be documented in this file.
 
+## [1.0.0] - 2026-04-09
+
+### Added — Sprint 8: Enterprise
+- AuditLog entity and AuditService for complete operation tracking
+- REST API: 15+ endpoints under `/api/v1/` (tickets CRUD, problems, changes, CMDB, groups, stats, audit, webhooks)
+- API supports pagination, filtering by status/priority/type
+- WebhookConfig entity and WebhookService with HMAC-SHA256 signature verification
+- Webhook auto-disable after 10 consecutive failures
+- UserDashboardConfig entity for per-user dashboard customization
+- EF Core migration "Enterprise" applied
+
+### Added — Sprint 7: Advanced Features
+- Real CSV export: GET `/api/export/tickets/csv` (semicolon delimited, UTF-8 BOM)
+- Real PDF export: GET `/api/export/tickets/pdf` (QuestPDF, A4 landscape, table + KPIs + pagination)
+- EmailGrabberService with MailKit: IMAP connection, fetch unread, auto-categorize by keywords
+- Workflow Builder: interactive canvas with 8 node types, 3 preset workflows, SVG bezier connections, property editor
+
 ## [0.6.0] - 2026-04-09
 
 ### Added — Sprint 6: Real-time & Background

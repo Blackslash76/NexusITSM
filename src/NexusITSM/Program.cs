@@ -34,7 +34,10 @@ builder.Services.AddSingleton<DemoDataService>();
 builder.Services.AddScoped<TicketService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<ExportService>();
+builder.Services.AddScoped<AuditService>();
 builder.Services.AddSingleton<EmailGrabberService>();
+builder.Services.AddSingleton<WebhookService>();
+builder.Services.AddHttpClient();
 builder.Services.AddHostedService<SlaBackgroundService>();
 
 // SignalR
@@ -64,6 +67,7 @@ app.MapStaticAssets();
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapAuthEndpoints();
 app.MapExportEndpoints();
+app.MapApiEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

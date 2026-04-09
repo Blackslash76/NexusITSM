@@ -17,6 +17,9 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<Change> Changes => Set<Change>();
     public DbSet<SupportGroup> SupportGroups => Set<SupportGroup>();
     public DbSet<ConfigurationItem> ConfigurationItems => Set<ConfigurationItem>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<WebhookConfig> WebhookConfigs => Set<WebhookConfig>();
+    public DbSet<UserDashboardConfig> UserDashboardConfigs => Set<UserDashboardConfig>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
