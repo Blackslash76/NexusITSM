@@ -1,0 +1,451 @@
+@page "/escalation"
+@inject NexusITSM.Services.DemoDataService Data
+
+<PageTitle>Escalation Matrix — NexusITSM</PageTitle>
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:14px;height:calc(100vh - 100px)">
+
+    <!-- ═══ LEFT COLUMN ═══════════════════════════════════════════════ -->
+    <div style="display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding-right:2px">
+
+        <!-- SLA Timeline Card -->
+        <div class="card" style="flex-shrink:0">
+            <div class="card-title">
+                ⏱ Escalation Timeline — Ticket Attivi (finestra 48h)
+                <span style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:400;color:var(--t3)">
+                    @ActiveTickets.Count ticket attivi
+                </span>
+            </div>
+
+            <!-- Hour labels -->
+            <div style="display:flex;margin-left:200px;margin-bottom:5px;position:relative">
+                @foreach (var label in new[] { "0h","6h","12h","18h","24h","30h","36h","42h","48h" })
+                {
+                    var idx = Array.IndexOf(new[] { "0h","6h","12h","18h","24h","30h","36h","42h","48h" }, label);
+                    <div style="position:absolute;left:@(idx * 12.5)%;font-size:9px;color:var(--t4);font-family:var(--mono);transform:translateX(-50%)">
+                        @label
+                    </div>
+                }
+            </div>
+
+            <!-- Timeline rows -->
+            <div style="display:flex;flex-direction:column;gap:5px;margin-top:18px">
+                @foreach (var t in ActiveTickets)
+                {
+                    var ageH    = (DateTime.UtcNow - t.CreatedAt).TotalHours;
+                    var barW    = Math.Min(100.0, ageH / 48.0 * 100.0);
+                    var slaHrs  = SlaHours(t.Priority);
+                    var slaPos  = Math.Min(100.0, slaHrs / 48.0 * 100.0);
+                    var barColor = BarColor(t);
+
+                    <div style="display:flex;align-items:center;gap:0;min-height:28px">
+                        <!-- Left info (200px) -->
+                        <div style="width:200px;flex-shrink:0;padding-right:10px;display:flex;flex-direction:column;gap:2px;min-width:0">
+                            <div style="display:flex;align-items:center;gap:5px">
+                                <span style="font-family:var(--mono);font-size:10px;color:var(--acc);flex-shrink:0">@t.Id</span>
+                                <PrioBadge Priority="@t.Priority" />
+                            </div>
+                            <div style="font-size:11px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px" title="@t.Title">
+                                @t.Title
+                            </div>
+                        </div>
+
+                        <!-- Right: bar area -->
+                        <div style="flex:1;position:relative;height:20px">
+                            <!-- Track -->
+                            <div style="position:absolute;inset:6px 0;background:var(--bg4);border-radius:3px;overflow:hidden">
+                                <!-- Age fill bar -->
+                                <div style="position:absolute;left:0;top:0;bottom:0;width:@(barW.ToString("F1"))%;background:@barColor;border-radius:3px;opacity:.85"></div>
+                            </div>
+
+                            <!-- SLA marker (red vertical line) -->
+                            <div style="position:absolute;top:0;bottom:0;left:@(slaPos.ToString("F1"))%;width:1.5px;background:var(--acc2);border-radius:1px;z-index:2" title="SLA breach: @slaHrs h"></div>
+
+                            <!-- NOW marker (blue vertical line) -->
+                            <div style="position:absolute;top:0;bottom:0;left:@(barW.ToString("F1"))%;width:2px;background:var(--acc);border-radius:1px;z-index:3">
+                                <div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:6px;height:6px;background:var(--acc);border-radius:50%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Age label -->
+                        <div style="width:44px;flex-shrink:0;text-align:right;font-family:var(--mono);font-size:10px;color:var(--t3)">
+                            @FormatAge(ageH)
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Legend -->
+            <div style="display:flex;align-items:center;gap:14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr)">
+                <span style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.06em">Legenda:</span>
+                @foreach (var (label, color) in new (string, string)[] {
+                    ("Normale",   "var(--acc)"),
+                    ("Warning",   "var(--acc4)"),
+                    ("Breach",    "var(--acc2)"),
+                    ("Escalated", "var(--acc5)")
+                })
+                {
+                    <div style="display:flex;align-items:center;gap:4px">
+                        <div style="width:12px;height:4px;border-radius:2px;background:@color"></div>
+                        <span style="font-size:10px;color:var(--t3)">@label</span>
+                    </div>
+                }
+                <div style="display:flex;align-items:center;gap:4px;margin-left:4px">
+                    <div style="width:1.5px;height:12px;background:var(--acc2)"></div>
+                    <span style="font-size:10px;color:var(--t3)">SLA</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px">
+                    <div style="width:2px;height:12px;background:var(--acc)"></div>
+                    <span style="font-size:10px;color:var(--t3)">NOW</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Escalation Path Card (critical ticket) -->
+        @if (CriticalTicket is not null)
+        {
+            <div class="card" style="flex-shrink:0">
+                <div class="card-title">
+                    🔺 Percorso di Escalation — @CriticalTicket.Id
+                    <span style="margin-left:6px;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--t2)">
+                        @CriticalTicket.Title
+                    </span>
+                    <span style="margin-left:auto">
+                        <PrioBadge Priority="@CriticalTicket.Priority" />
+                    </span>
+                </div>
+
+                <!-- Vertical stepper -->
+                <div style="display:flex;flex-direction:column;gap:0;padding:4px 0">
+                    @foreach (var (level, idx) in EscalationPath.Select((l, i) => (l, i)))
+                    {
+                        var isDone   = idx < CurrentLevelIndex;
+                        var isCurrent = idx == CurrentLevelIndex;
+                        var dotColor = isDone
+                            ? (idx == 0 ? "#30C48D" : idx == 1 ? "var(--acc)" : "var(--acc5)")
+                            : isCurrent ? "var(--acc4)" : "var(--bg4)";
+                        var dotBorder = isDone || isCurrent ? "none" : "1.5px solid var(--t4)";
+                        var lineColor = isDone ? "var(--acc3)" : "var(--bdr2)";
+                        var isLast    = idx == EscalationPath.Count - 1;
+
+                        <div style="display:flex;gap:0">
+                            <!-- Dot + line column -->
+                            <div style="display:flex;flex-direction:column;align-items:center;width:32px;flex-shrink:0">
+                                <!-- Dot -->
+                                <div style="width:18px;height:18px;border-radius:50%;background:@dotColor;border:@dotBorder;display:flex;align-items:center;justify-content:center;z-index:1;flex-shrink:0;margin-top:2px">
+                                    @if (isDone)
+                                    {
+                                        <span style="font-size:9px;color:#000;font-weight:700">✓</span>
+                                    }
+                                    else if (isCurrent)
+                                    {
+                                        <div style="width:6px;height:6px;border-radius:50%;background:#fff"></div>
+                                    }
+                                </div>
+                                <!-- Connector line -->
+                                @if (!isLast)
+                                {
+                                    <div style="width:2px;flex:1;min-height:24px;background:@lineColor;margin:2px 0"></div>
+                                }
+                            </div>
+
+                            <!-- Content -->
+                            <div style="flex:1;padding:2px 0 @(isLast ? "0" : "16px") 10px">
+                                <div style="display:flex;align-items:center;gap:7px">
+                                    <span style="font-size:12px;font-weight:700;color:@(isCurrent ? "var(--t1)" : isDone ? "var(--t2)" : "var(--t4)")">
+                                        @level.Label
+                                    </span>
+                                    @if (isCurrent)
+                                    {
+                                        <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(255,176,32,.15);color:var(--acc4);font-weight:600;font-family:var(--mono)">CORRENTE</span>
+                                    }
+                                    @if (isDone)
+                                    {
+                                        <span style="font-size:10px;color:var(--acc3)">completato</span>
+                                    }
+                                </div>
+                                <div style="font-size:11px;color:var(--t3);margin-top:2px">@level.Description</div>
+                                @if (isDone && level.DoneAt is not null)
+                                {
+                                    <div style="font-size:10px;color:var(--t4);font-family:var(--mono);margin-top:1px">@level.DoneAt</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Action buttons -->
+                <div style="display:flex;gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">
+                    <button class="btn pri sm">▲ Escalate ora</button>
+                    <button class="btn sm">📋 Storico escalation</button>
+                    <button class="btn sm" style="margin-left:auto">✉ Notifica CIO</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ═══ RIGHT COLUMN ══════════════════════════════════════════════ -->
+    <div style="display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding-right:2px">
+
+        <!-- Escalation Rules Card -->
+        <div class="card">
+            <div class="card-title">
+                ⚡ Regole di Escalation
+                <span style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:400;color:var(--acc3)">
+                    @Rules.Count(r => r.Active) / @Rules.Count attive
+                </span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+                @foreach (var rule in Rules)
+                {
+                    <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--r);padding:10px 12px;@(rule.Active ? "border-left:2px solid var(--acc);" : "opacity:.6;")">
+                        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                    @rule.Name
+                                </div>
+                                <div style="font-size:10px;color:var(--t4);margin-top:2px;font-family:var(--mono)">
+                                    Trigger: @rule.Trigger
+                                </div>
+                                <div style="display:flex;align-items:center;gap:5px;margin-top:5px">
+                                    <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(48,196,141,.12);color:var(--acc3);font-weight:700;font-family:var(--mono)">@rule.FromLevel</span>
+                                    <span style="font-size:11px;color:var(--t4)">→</span>
+                                    <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(75,158,255,.12);color:var(--acc);font-weight:700;font-family:var(--mono)">@rule.ToLevel</span>
+                                </div>
+                            </div>
+                            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0;margin-top:1px">
+                                <input type="checkbox"
+                                       checked="@rule.Active"
+                                       @onchange="e => rule.Active = (bool)(e.Value ?? false)"
+                                       style="accent-color:var(--acc);width:14px;height:14px;cursor:pointer" />
+                                <span style="font-size:10px;color:var(--t3)">@(rule.Active ? "On" : "Off")</span>
+                            </label>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <button class="btn sm" style="margin-top:10px;width:100%;justify-content:center">+ Nuova regola</button>
+        </div>
+
+        <!-- Escalation Stats Card -->
+        <div class="card">
+            <div class="card-title">📊 Statistiche Escalation</div>
+
+            <!-- Counts by level -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+                @foreach (var (lbl, count, color) in new (string, int, string)[] {
+                    ("L1",  Stats.CountL1, "var(--acc3)"),
+                    ("L2",  Stats.CountL2, "var(--acc)"),
+                    ("L3",  Stats.CountL3, "var(--acc5)")
+                })
+                {
+                    <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--r);padding:10px;text-align:center;border-top:2px solid @color">
+                        <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:@color">@count</div>
+                        <div style="font-size:10px;color:var(--t4);margin-top:2px;font-weight:700;letter-spacing:.06em">@lbl</div>
+                    </div>
+                }
+            </div>
+
+            <!-- Breakdown by priority with progress bars -->
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t4);margin-bottom:8px">
+                Distribuzione per priorità
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                @foreach (var (prio, count, color, label) in PriorityBreakdown)
+                {
+                    var pct = Stats.Total > 0 ? (count * 100 / Stats.Total) : 0;
+                    <div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <div style="width:8px;height:8px;border-radius:50%;background:@color;flex-shrink:0"></div>
+                                <span style="font-size:11px;color:var(--t2)">@label</span>
+                            </div>
+                            <span style="font-family:var(--mono);font-size:11px;color:var(--t3)">
+                                @count <span style="color:var(--t4);font-size:10px">(@pct%)</span>
+                            </span>
+                        </div>
+                        <div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden">
+                            <div style="height:100%;width:@pct%;background:@color;border-radius:3px;transition:width .4s"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Extra stats row -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+                <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 10px">
+                    <div style="font-size:10px;color:var(--t4)">SLA in breach</div>
+                    <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--acc2);margin-top:2px">@Stats.BreachCount</div>
+                </div>
+                <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 10px">
+                    <div style="font-size:10px;color:var(--t4)">In warning</div>
+                    <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--acc4);margin-top:2px">@Stats.WarnCount</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /* ── Data ─────────────────────────────────────────────────────── */
+
+    private List<Ticket> ActiveTickets = [];
+    private Ticket?      CriticalTicket;
+
+    /* ── Escalation Rules ────────────────────────────────────────── */
+
+    private class EscRule
+    {
+        public string Name      { get; set; } = "";
+        public string Trigger   { get; set; } = "";
+        public string FromLevel { get; set; } = "";
+        public string ToLevel   { get; set; } = "";
+        public bool   Active    { get; set; }
+    }
+
+    private List<EscRule> Rules =
+    [
+        new() { Name = "Auto-escalate Critical",    Trigger = "SLA > 50%",       FromLevel = "L1", ToLevel = "L2",          Active = true  },
+        new() { Name = "High Priority 4h",          Trigger = "Nessun update 4h", FromLevel = "L1", ToLevel = "L2",          Active = true  },
+        new() { Name = "SLA Breach → Management",   Trigger = "SLA 100%",         FromLevel = "L2", ToLevel = "L3",          Active = true  },
+        new() { Name = "Security Incident",         Trigger = "Tag: security",    FromLevel = "L1", ToLevel = "L2 Security", Active = true  },
+    ];
+
+    /* ── Escalation Path stepper ─────────────────────────────────── */
+
+    private class EscStep
+    {
+        public string  Label       { get; set; } = "";
+        public string  Description { get; set; } = "";
+        public string? DoneAt      { get; set; }
+    }
+
+    private List<EscStep> EscalationPath = [];
+    private int CurrentLevelIndex;
+
+    /* ── Stats ───────────────────────────────────────────────────── */
+
+    private record EscStats(int CountL1, int CountL2, int CountL3, int Total, int BreachCount, int WarnCount);
+    private EscStats Stats = new(0, 0, 0, 0, 0, 0);
+
+    private List<(TicketPriority Prio, int Count, string Color, string Label)> PriorityBreakdown = [];
+
+    /* ── Lifecycle ───────────────────────────────────────────────── */
+
+    protected override void OnInitialized()
+    {
+        ActiveTickets = Data.Tickets
+            .Where(t => t.Status is not TicketStatus.Resolved and not TicketStatus.Closed)
+            .OrderBy(t => t.Priority)
+            .ThenByDescending(t => t.SlaPercent)
+            .ToList();
+
+        CriticalTicket = ActiveTickets.FirstOrDefault(t => t.Priority == TicketPriority.Critical);
+
+        BuildEscalationPath();
+        BuildStats();
+    }
+
+    private void BuildEscalationPath()
+    {
+        if (CriticalTicket is null) return;
+
+        var now = DateTime.UtcNow;
+        var ageH = (now - CriticalTicket.CreatedAt).TotalHours;
+
+        EscalationPath =
+        [
+            new EscStep
+            {
+                Label       = "L1 — Help Desk",
+                Description = "Ricezione e prima analisi del ticket",
+                DoneAt      = $"preso in carico {FormatRelative(CriticalTicket.CreatedAt)}"
+            },
+            new EscStep
+            {
+                Label       = "L2 — Engineering",
+                Description = "Diagnosi avanzata e risoluzione tecnica",
+                DoneAt      = CriticalTicket.IsEscalated ? $"escalation {FormatRelative(CriticalTicket.CreatedAt.AddHours(1))}" : null
+            },
+            new EscStep
+            {
+                Label       = "L3 — Specialisti",
+                Description = "Intervento vendor / specialista senior",
+                DoneAt      = null
+            },
+            new EscStep
+            {
+                Label       = "CIO — Management",
+                Description = "Escalation critica a direzione IT",
+                DoneAt      = null
+            },
+        ];
+
+        CurrentLevelIndex = CriticalTicket.EscalationLevel switch
+        {
+            EscalationLevel.None => 0,
+            EscalationLevel.L1   => 0,
+            EscalationLevel.L2   => 1,
+            EscalationLevel.L3   => 2,
+            _                    => 0
+        };
+
+        if (CriticalTicket.SlaStatus == SlaStatus.Breach && CriticalTicket.EscalationLevel == EscalationLevel.None)
+            CurrentLevelIndex = 1;
+    }
+
+    private void BuildStats()
+    {
+        var all      = ActiveTickets;
+        var countL1  = all.Count(t => t.EscalationLevel == EscalationLevel.L1 || t.EscalationLevel == EscalationLevel.None);
+        var countL2  = all.Count(t => t.EscalationLevel == EscalationLevel.L2);
+        var countL3  = all.Count(t => t.EscalationLevel == EscalationLevel.L3);
+        var breaches = all.Count(t => t.SlaStatus == SlaStatus.Breach);
+        var warnings = all.Count(t => t.SlaStatus == SlaStatus.Warning);
+
+        Stats = new EscStats(countL1, countL2, countL3, all.Count, breaches, warnings);
+
+        PriorityBreakdown =
+        [
+            (TicketPriority.Critical, all.Count(t => t.Priority == TicketPriority.Critical), "var(--acc2)", "Critical"),
+            (TicketPriority.High,     all.Count(t => t.Priority == TicketPriority.High),     "var(--acc6)", "High"),
+            (TicketPriority.Medium,   all.Count(t => t.Priority == TicketPriority.Medium),   "var(--acc4)", "Medium"),
+            (TicketPriority.Low,      all.Count(t => t.Priority == TicketPriority.Low),       "var(--acc)",  "Low"),
+        ];
+    }
+
+    /* ── Helpers ─────────────────────────────────────────────────── */
+
+    private static int SlaHours(TicketPriority p) => p switch
+    {
+        TicketPriority.Critical => 2,
+        TicketPriority.High     => 4,
+        TicketPriority.Medium   => 8,
+        _                       => 24
+    };
+
+    private static string BarColor(Ticket t)
+    {
+        if (t.IsEscalated)              return "var(--acc5)";
+        if (t.SlaStatus == SlaStatus.Breach)  return "var(--acc2)";
+        if (t.SlaStatus == SlaStatus.Warning) return "var(--acc4)";
+        return "var(--acc)";
+    }
+
+    private static string FormatAge(double hours)
+    {
+        if (hours < 1) return $"{(int)(hours * 60)}m";
+        if (hours < 24) return $"{(int)hours}h";
+        return $"{(int)(hours / 24)}g";
+    }
+
+    private static string FormatRelative(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m fa";
+        if (diff.TotalHours   < 24) return $"{(int)diff.TotalHours}h fa";
+        return $"{(int)diff.TotalDays}g fa";
+    }
+}

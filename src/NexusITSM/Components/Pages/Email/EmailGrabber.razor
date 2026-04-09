@@ -1,0 +1,310 @@
+@page "/email"
+@inject NexusITSM.Services.DemoDataService Data
+
+<PageTitle>Email Grabber — NexusITSM</PageTitle>
+
+<!-- Email Configuration Card -->
+<div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden;margin-bottom:18px">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-weight:700;font-size:13px;color:var(--t1)">✉ Configurazione IMAP</span>
+        <span class="@(IsConnected ? "badge-ok" : "badge-breach")" style="font-size:10px;padding:2px 8px;border-radius:var(--r);font-weight:600">
+            @(IsConnected ? "Connesso" : "Non connesso")
+        </span>
+    </div>
+    <div style="padding:16px">
+        <div class="fgrid c3" style="gap:12px">
+            <div class="fg">
+                <label class="fl">Server IMAP</label>
+                <input class="fi" @bind="ImapServer" placeholder="mail.example.com" />
+            </div>
+            <div class="fg">
+                <label class="fl">Porta</label>
+                <input class="fi" type="number" @bind="ImapPort" />
+            </div>
+            <div class="fg">
+                <label class="fl">Cartella</label>
+                <input class="fi" @bind="ImapFolder" />
+            </div>
+            <div class="fg">
+                <label class="fl">Username</label>
+                <input class="fi" @bind="ImapUser" placeholder="helpdesk@azienda.it" />
+            </div>
+            <div class="fg">
+                <label class="fl">Password</label>
+                <input class="fi" type="password" @bind="ImapPassword" />
+            </div>
+            <div class="fg">
+                <label class="fl">Intervallo Polling</label>
+                <select class="fi" @bind="PollingInterval">
+                    <option value="1">Ogni 1 minuto</option>
+                    <option value="5">Ogni 5 minuti</option>
+                    <option value="10">Ogni 10 minuti</option>
+                    <option value="15">Ogni 15 minuti</option>
+                    <option value="30">Ogni 30 minuti</option>
+                    <option value="60">Ogni ora</option>
+                </select>
+            </div>
+        </div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:16px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2);cursor:pointer">
+                <input type="checkbox" @bind="UseSsl" /> Usa SSL/TLS
+            </label>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:8px">
+            <button class="btn" @onclick="TestConnection">⚡ Test Connessione</button>
+            <button class="btn pri" @onclick="SaveConfig">💾 Salva</button>
+        </div>
+        @if (ConfigMessage != null)
+        {
+            <div style="margin-top:10px;font-size:11px;color:@(ConfigSuccess ? "var(--acc3)" : "var(--acc2)")">
+                @ConfigMessage
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Email Queue Card -->
+<div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden;margin-bottom:18px">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px">
+        <span style="font-weight:700;font-size:13px;color:var(--t1)">📥 Coda Email</span>
+        <span style="font-size:11px;color:var(--t4);font-family:var(--mono)">@EmailQueue.Count messaggi</span>
+        <button class="btn sm" style="margin-left:auto" @onclick="RefreshQueue">↻ Aggiorna</button>
+    </div>
+    <div class="tbl-wrap">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Da</th>
+                    <th>Oggetto</th>
+                    <th>Data</th>
+                    <th>Status</th>
+                    <th>Azione</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var mail in EmailQueue)
+                {
+                    <tr>
+                        <td style="font-size:11px;color:var(--t2)">@mail.From</td>
+                        <td style="max-width:280px">
+                            <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@mail.Subject">@mail.Subject</div>
+                        </td>
+                        <td style="font-size:11px;font-family:var(--mono);color:var(--t4);white-space:nowrap">@FormatDate(mail.ReceivedAt)</td>
+                        <td>
+                            <span class="@MailStatusClass(mail.Status)" style="font-size:10px;padding:2px 8px;border-radius:var(--r);font-weight:600">
+                                @mail.Status
+                            </span>
+                        </td>
+                        <td>
+                            @if (mail.Status == "Nuovo")
+                            {
+                                <button class="btn sm pri" @onclick="() => ConvertToTicket(mail)">→ Ticket</button>
+                            }
+                            else
+                            {
+                                <span style="font-size:11px;color:var(--t4)">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Parsing Rules Card -->
+<div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-weight:700;font-size:13px;color:var(--t1)">⚙ Regole di Parsing</span>
+        <button class="btn sm pri">+ Nuova Regola</button>
+    </div>
+    <div class="tbl-wrap">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Condizione</th>
+                    <th>Categoria Assegnata</th>
+                    <th>Priorità</th>
+                    <th style="text-align:center">Attiva</th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (int i = 0; i < ParsingRules.Count; i++)
+                {
+                    var rule = ParsingRules[i];
+                    var idx  = i;
+                    <tr>
+                        <td style="font-size:12px;color:var(--t1)">@rule.Condition</td>
+                        <td>
+                            <span style="font-size:11px;font-family:var(--mono);background:var(--bg3);padding:2px 8px;border-radius:var(--r)">@rule.Category</span>
+                        </td>
+                        <td><PrioBadge Priority="@rule.Priority" /></td>
+                        <td style="text-align:center">
+                            <input type="checkbox" checked="@rule.Active"
+                                   @onchange="@CreateRuleToggleHandler(idx)" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Convert to Ticket confirm toast -->
+@if (ToastMessage != null)
+{
+    <div style="position:fixed;bottom:24px;right:24px;background:var(--acc3);color:#000;padding:10px 18px;border-radius:var(--r);font-size:12px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+        ✓ @ToastMessage
+    </div>
+}
+
+@code {
+    // ---------- Configuration ----------
+    private string ImapServer = "mail.azienda.it";
+    private int    ImapPort   = 993;
+    private string ImapFolder = "INBOX";
+    private string ImapUser   = "helpdesk@azienda.it";
+    private string ImapPassword = "••••••••";
+    private bool   UseSsl     = true;
+    private int    PollingInterval = 5;
+
+    private bool   IsConnected   = false;
+    private string? ConfigMessage = null;
+    private bool   ConfigSuccess  = false;
+
+    private void TestConnection()
+    {
+        // Simulated test
+        IsConnected = true;
+        ConfigSuccess = true;
+        ConfigMessage = $"Connessione a {ImapServer}:{ImapPort} riuscita. {EmailQueue.Count(m => m.Status == "Nuovo")} nuovi messaggi trovati.";
+    }
+
+    private void SaveConfig()
+    {
+        ConfigSuccess = true;
+        ConfigMessage = "Configurazione salvata correttamente.";
+    }
+
+    // ---------- Email Queue ----------
+    private class MockEmail
+    {
+        public int    Id         { get; set; }
+        public string From       { get; set; } = "";
+        public string Subject    { get; set; } = "";
+        public DateTime ReceivedAt { get; set; }
+        public string Status     { get; set; } = "Nuovo"; // Nuovo / Processato / Errore
+        public TicketCategory GuessedCategory { get; set; }
+        public TicketPriority GuessedPriority { get; set; }
+    }
+
+    private readonly List<MockEmail> EmailQueue =
+    [
+        new() { Id = 1, From = "m.bianchi@acme.it",        Subject = "VPN non funziona — impossibile connettersi da remoto",     ReceivedAt = DateTime.UtcNow.AddMinutes(-8),  Status = "Nuovo",      GuessedCategory = TicketCategory.VPN,    GuessedPriority = TicketPriority.High },
+        new() { Id = 2, From = "security@audit-corp.com",   Subject = "[Security Alert] Tentativo di accesso non autorizzato",     ReceivedAt = DateTime.UtcNow.AddMinutes(-22), Status = "Nuovo",      GuessedCategory = TicketCategory.Security, GuessedPriority = TicketPriority.Critical },
+        new() { Id = 3, From = "r.verdi@azienda.it",        Subject = "Richiesta installazione Adobe Acrobat Pro",                 ReceivedAt = DateTime.UtcNow.AddMinutes(-45), Status = "Processato", GuessedCategory = TicketCategory.Software, GuessedPriority = TicketPriority.Low },
+        new() { Id = 4, From = "helpdesk-relay@firma.it",   Subject = "Stampante 3° piano — si inceppa continuamente",            ReceivedAt = DateTime.UtcNow.AddHours(-1),    Status = "Errore",     GuessedCategory = TicketCategory.Printer,  GuessedPriority = TicketPriority.Medium },
+        new() { Id = 5, From = "l.neri@azienda.it",         Subject = "Password scaduta — accesso bloccato account SAP",          ReceivedAt = DateTime.UtcNow.AddHours(-2),    Status = "Nuovo",      GuessedCategory = TicketCategory.AccessManagement, GuessedPriority = TicketPriority.High },
+    ];
+
+    private string? ToastMessage;
+
+    private void RefreshQueue()
+    {
+        // In a real app this would fetch from IMAP; here we just no-op
+        ConfigMessage = "Coda aggiornata.";
+        ConfigSuccess = true;
+    }
+
+    private async void ConvertToTicket(MockEmail mail)
+    {
+        var agent = Data.Agents[1];
+        var group = Data.Groups[0];
+        var slaHours = mail.GuessedPriority switch
+        {
+            TicketPriority.Critical => 2,
+            TicketPriority.High     => 4,
+            TicketPriority.Medium   => 8,
+            _                       => 24
+        };
+
+        var ticket = new Ticket
+        {
+            Id         = Data.NextTicketId(),
+            Title      = mail.Subject,
+            Description = $"Email da: {mail.From}",
+            Priority   = mail.GuessedPriority,
+            Category   = mail.GuessedCategory,
+            Status     = TicketStatus.Open,
+            Requester  = mail.From,
+            Department = "Email",
+            Assignee   = agent,
+            AssigneeId = agent.Id,
+            Group      = group,
+            GroupId    = group.Id,
+            CreatedAt  = mail.ReceivedAt,
+            SlaBreachAt = mail.ReceivedAt.AddHours(slaHours),
+            SlaPercent  = 0,
+            SlaStatus   = SlaStatus.Ok,
+            Tags        = ["email", "auto-import"],
+            Timeline    =
+            [
+                new TimelineEvent
+                {
+                    Type      = TimelineEventType.Created,
+                    Actor     = "Email Grabber",
+                    Message   = $"Ticket creato automaticamente da email di {mail.From}",
+                    CreatedAt = DateTime.UtcNow
+                }
+            ]
+        };
+
+        Data.Tickets.Insert(0, ticket);
+        mail.Status = "Processato";
+        ToastMessage = $"Ticket {ticket.Id} creato da email di {mail.From}";
+        StateHasChanged();
+        await Task.Delay(3000);
+        ToastMessage = null;
+        StateHasChanged();
+    }
+
+    private static string MailStatusClass(string status) => status switch
+    {
+        "Processato" => "badge-ok",
+        "Errore"     => "badge-breach",
+        _            => "badge-warn"
+    };
+
+    private static string FormatDate(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m fa";
+        if (diff.TotalHours < 24)   return $"{(int)diff.TotalHours}h fa";
+        return dt.ToString("dd/MM HH:mm");
+    }
+
+    // ---------- Parsing Rules ----------
+    private class ParsingRule
+    {
+        public string Condition { get; set; } = "";
+        public string Category  { get; set; } = "";
+        public TicketPriority Priority { get; set; }
+        public bool Active { get; set; } = true;
+    }
+
+    private readonly List<ParsingRule> ParsingRules =
+    [
+        new() { Condition = "Oggetto contiene 'VPN'",              Category = "Network/VPN",       Priority = TicketPriority.High,     Active = true  },
+        new() { Condition = "Da contiene 'security'",              Category = "Security",          Priority = TicketPriority.Critical, Active = true  },
+        new() { Condition = "Oggetto contiene 'password' o 'accesso bloccato'", Category = "Access Management", Priority = TicketPriority.High, Active = true },
+        new() { Condition = "Oggetto contiene 'stampante' o 'printer'",         Category = "Printing",          Priority = TicketPriority.Medium, Active = true },
+        new() { Condition = "Oggetto contiene 'laptop' o 'notebook'",           Category = "Hardware",          Priority = TicketPriority.Low,  Active = false },
+        new() { Condition = "Oggetto contiene 'email' o 'outlook' o 'mailbox'", Category = "Email",             Priority = TicketPriority.Medium, Active = true },
+    ];
+
+    private EventCallback<ChangeEventArgs> CreateRuleToggleHandler(int index)
+        => EventCallback.Factory.Create<ChangeEventArgs>(this, e => OnRuleToggle(index, e));
+
+    private void OnRuleToggle(int index, ChangeEventArgs e)
+        => ParsingRules[index].Active = (bool)(e.Value ?? false);
+}

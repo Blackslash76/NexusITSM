@@ -1,0 +1,846 @@
+@page "/cmdb"
+@inject NexusITSM.Services.DemoDataService Data
+
+@using NexusITSM.Models.Entities
+@using NexusITSM.Models.Enums
+@using NexusITSM.Components.Shared
+
+<PageTitle>CMDB / Assets — NexusITSM</PageTitle>
+
+<!-- ═══ TABS ══════════════════════════════════════════════════════════ -->
+<div class="tabs">
+    <div class="tab @(ActiveTab == "inventory" ? "act" : "")" @onclick='() => ActiveTab = "inventory"'>📦 Inventario</div>
+    <div class="tab @(ActiveTab == "discovery" ? "act" : "")" @onclick='() => ActiveTab = "discovery"'>🔍 Discovery</div>
+    <div class="tab @(ActiveTab == "agents" ? "act" : "")" @onclick='() => ActiveTab = "agents"'>🤖 Agents</div>
+    <div class="tab @(ActiveTab == "snmp" ? "act" : "")" @onclick='() => ActiveTab = "snmp"'>📡 SNMP</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     TAB: INVENTARIO
+════════════════════════════════════════════════════════════════════ -->
+<div style="display:@(ActiveTab == "inventory" ? "block" : "none")">
+
+    <!-- Filters -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <input class="fi" type="text" placeholder="Cerca per nome, IP…"
+               style="padding:5px 10px;font-size:11px;width:220px"
+               @bind="InvSearch" @bind:event="oninput" />
+        <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto"
+                @onchange="OnFilterType">
+            <option value="">Tutti i tipi</option>
+            @foreach (var t in CiTypes)
+            {
+                <option value="@t">@t</option>
+            }
+        </select>
+        <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto"
+                @onchange="OnFilterStatus">
+            <option value="">Tutti gli status</option>
+            @foreach (var s in Enum.GetValues<CIStatus>())
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+        <div style="margin-left:auto;font-size:11px;color:var(--t4);font-family:var(--mono)">
+            @FilteredCIs.Count() CI
+        </div>
+    </div>
+
+    <!-- Table + Detail side-by-side -->
+    <div style="display:grid;grid-template-columns:1fr @(SelectedCI != null ? "340px" : "0px");gap:12px;transition:grid-template-columns .2s">
+
+        <!-- Table -->
+        <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden">
+            <div class="tbl-wrap" style="height:calc(100vh - 185px);overflow-y:auto">
+                <table class="tbl">
+                    <thead style="position:sticky;top:0;z-index:1">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nome</th>
+                            <th>Tipo</th>
+                            <th>IP / MAC</th>
+                            <th>OS</th>
+                            <th>Status</th>
+                            <th>Criticità</th>
+                            <th>Agent</th>
+                            <th>SNMP</th>
+                            <th>Ultimo Visto</th>
+                            <th style="text-align:center">Ticket</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ci in FilteredCIs)
+                        {
+                            <tr @onclick="() => SelectCI(ci)"
+                                class="@(SelectedCI?.Id == ci.Id ? "sel" : "")"
+                                style="@(SelectedCI?.Id == ci.Id ? "background:rgba(75,158,255,.06)" : "")">
+                                <td>@ci.Id</td>
+                                <td style="max-width:180px">
+                                    <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@ci.Name">@ci.Name</div>
+                                    @if (!string.IsNullOrEmpty(ci.Location))
+                                    {
+                                        <div style="font-size:10px;color:var(--t4)">@ci.Location</div>
+                                    }
+                                </td>
+                                <td><span class="tag">@ci.Type</span></td>
+                                <td>
+                                    <div style="font-family:var(--mono);font-size:11px;color:var(--t2)">@(ci.IpAddress ?? "—")</div>
+                                    @if (!string.IsNullOrEmpty(ci.MacAddress))
+                                    {
+                                        <div style="font-size:10px;color:var(--t4);font-family:var(--mono)">@ci.MacAddress</div>
+                                    }
+                                </td>
+                                <td style="font-size:11px;color:var(--t3);max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@ci.OperatingSystem">@(ci.OperatingSystem ?? "—")</td>
+                                <td>@CiStatusBadge(ci.Status)</td>
+                                <td style="font-size:11px;font-weight:700;color:@CritColor(ci.Criticality)">@ci.Criticality</td>
+                                <td style="text-align:center;font-size:14px">
+                                    @if (ci.HasAgent)
+                                    {
+                                        <span title="Agent v@ci.AgentVersion" style="color:var(--acc3)">✅</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:var(--t4)">○</span>
+                                    }
+                                </td>
+                                <td style="font-size:10px;font-family:var(--mono);color:var(--t3)">
+                                    @if (!string.IsNullOrEmpty(ci.SnmpVersion))
+                                    {
+                                        <span style="background:rgba(75,158,255,.1);color:var(--acc);padding:1px 5px;border-radius:3px">@ci.SnmpVersion</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:var(--t4)">—</span>
+                                    }
+                                </td>
+                                <td style="font-size:11px;color:var(--t4);font-family:var(--mono);white-space:nowrap">
+                                    @FormatRelative(ci.LastSeen)
+                                </td>
+                                <td style="text-align:center">
+                                    @if (ci.TicketCount > 0)
+                                    {
+                                        <span style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--acc4)">@ci.TicketCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:var(--t4)">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Detail panel -->
+        @if (SelectedCI != null)
+        {
+            <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow-y:auto;height:calc(100vh - 185px)">
+                <!-- Header -->
+                <div style="padding:14px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                    <div>
+                        <div style="font-size:10px;font-family:var(--mono);color:var(--acc);margin-bottom:3px">@SelectedCI.Id</div>
+                        <div style="font-size:14px;font-weight:700;color:var(--t1)">@SelectedCI.Name</div>
+                        <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                            <span class="tag">@SelectedCI.Type</span>
+                            @CiStatusBadge(SelectedCI.Status)
+                            <span style="font-size:11px;font-weight:700;color:@CritColor(SelectedCI.Criticality)">@SelectedCI.Criticality</span>
+                        </div>
+                    </div>
+                    <button class="btn sm ico" @onclick="() => SelectedCI = null" title="Chiudi">✕</button>
+                </div>
+
+                <!-- Fields -->
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+                    <div>
+                        <div class="td-label">Indirizzo IP</div>
+                        <div style="font-family:var(--mono);font-size:12px;color:var(--t1)">@(SelectedCI.IpAddress ?? "—")</div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(SelectedCI.MacAddress))
+                    {
+                        <div>
+                            <div class="td-label">MAC Address</div>
+                            <div style="font-family:var(--mono);font-size:12px;color:var(--t2)">@SelectedCI.MacAddress</div>
+                        </div>
+                    }
+                    <div>
+                        <div class="td-label">Sistema Operativo</div>
+                        <div style="font-size:12px;color:var(--t1)">@(SelectedCI.OperatingSystem ?? "—")</div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(SelectedCI.Version))
+                    {
+                        <div>
+                            <div class="td-label">Versione</div>
+                            <div style="font-size:12px;color:var(--t2)">@SelectedCI.Version</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(SelectedCI.Owner))
+                    {
+                        <div>
+                            <div class="td-label">Owner</div>
+                            <div style="font-size:12px;color:var(--t2)">@SelectedCI.Owner</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(SelectedCI.Location))
+                    {
+                        <div>
+                            <div class="td-label">Location</div>
+                            <div style="font-size:12px;color:var(--t2)">@SelectedCI.Location</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(SelectedCI.Vendor))
+                    {
+                        <div>
+                            <div class="td-label">Vendor / Modello</div>
+                            <div style="font-size:12px;color:var(--t2)">@SelectedCI.Vendor @SelectedCI.Model</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(SelectedCI.SerialNumber))
+                    {
+                        <div>
+                            <div class="td-label">Seriale</div>
+                            <div style="font-family:var(--mono);font-size:12px;color:var(--t3)">@SelectedCI.SerialNumber</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(SelectedCI.Vlan))
+                    {
+                        <div>
+                            <div class="td-label">VLAN</div>
+                            <div style="font-family:var(--mono);font-size:12px;color:var(--t2)">@SelectedCI.Vlan</div>
+                        </div>
+                    }
+
+                    <div style="height:1px;background:var(--bdr)"></div>
+
+                    <!-- Agent info -->
+                    <div>
+                        <div class="td-label">Agent</div>
+                        @if (SelectedCI.HasAgent)
+                        {
+                            <div style="display:flex;align-items:center;gap:7px">
+                                <span style="width:8px;height:8px;border-radius:50%;background:var(--acc3);display:inline-block"></span>
+                                <span style="font-size:12px;color:var(--acc3);font-weight:600">Attivo</span>
+                                <span style="font-size:11px;color:var(--t4);font-family:var(--mono)">v@SelectedCI.AgentVersion</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <span style="font-size:12px;color:var(--t4)">Non installato</span>
+                        }
+                    </div>
+
+                    <!-- SNMP info -->
+                    <div>
+                        <div class="td-label">SNMP</div>
+                        @if (!string.IsNullOrEmpty(SelectedCI.SnmpVersion))
+                        {
+                            <span style="background:rgba(75,158,255,.1);color:var(--acc);padding:2px 8px;border-radius:3px;font-family:var(--mono);font-size:11px">@SelectedCI.SnmpVersion</span>
+                        }
+                        else
+                        {
+                            <span style="font-size:12px;color:var(--t4)">Non configurato</span>
+                        }
+                    </div>
+
+                    <div style="height:1px;background:var(--bdr)"></div>
+
+                    <div>
+                        <div class="td-label">Ultimo Visto</div>
+                        <div style="font-size:12px;color:var(--t2);font-family:var(--mono)">
+                            @(SelectedCI.LastSeen.HasValue ? SelectedCI.LastSeen.Value.ToString("dd/MM/yyyy HH:mm") : "—")
+                        </div>
+                    </div>
+                    <div>
+                        <div class="td-label">Creato il</div>
+                        <div style="font-size:12px;color:var(--t3);font-family:var(--mono)">@SelectedCI.CreatedAt.ToString("dd/MM/yyyy")</div>
+                    </div>
+                    <div>
+                        <div class="td-label">Ticket Collegati</div>
+                        <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:@(SelectedCI.TicketCount > 0 ? "var(--acc4)" : "var(--t4)")">@SelectedCI.TicketCount</div>
+                    </div>
+
+                    @if (SelectedCI.Tags.Any())
+                    {
+                        <div>
+                            <div class="td-label">Tag</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+                                @foreach (var tag in SelectedCI.Tags)
+                                {
+                                    <span class="tag">@tag</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                    @if (SelectedCI.Services.Any())
+                    {
+                        <div>
+                            <div class="td-label">Servizi</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+                                @foreach (var svc in SelectedCI.Services)
+                                {
+                                    <span class="tag" style="background:rgba(48,196,141,.1);color:var(--acc3)">@svc</span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div style="display:flex;gap:7px;padding-top:4px">
+                        <button class="btn sm" style="flex:1">✏️ Modifica</button>
+                        <button class="btn sm dan">🗑 Rimuovi</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     TAB: DISCOVERY
+════════════════════════════════════════════════════════════════════ -->
+<div style="display:@(ActiveTab == "discovery" ? "block" : "none")">
+
+    <!-- 3 cards -->
+    <div class="grid3" style="margin-bottom:18px">
+        <!-- Manual -->
+        <div class="card" style="cursor:pointer;transition:border-color .15s" @onclick="RunManualDiscovery">
+            <div style="font-size:28px;margin-bottom:10px">🔍</div>
+            <div class="card-title">Discovery Manuale</div>
+            <div style="font-size:12px;color:var(--t3);line-height:1.6;margin-bottom:12px">
+                Scansione immediata di un range IP o singolo host. Risultati in tempo reale.
+            </div>
+            <div class="fg">
+                <label class="fl">Range IP / Host</label>
+                <input class="fi" @bind="DiscoveryRange" placeholder="es. 10.0.1.0/24" style="font-family:var(--mono)" />
+            </div>
+            <button class="btn pri" style="width:100%" @onclick:stopPropagation="true" @onclick="RunManualDiscovery">▶ Avvia Scansione</button>
+        </div>
+
+        <!-- Scheduled -->
+        <div class="card">
+            <div style="font-size:28px;margin-bottom:10px">⏰</div>
+            <div class="card-title">Discovery Schedulata</div>
+            <div style="font-size:12px;color:var(--t3);line-height:1.6;margin-bottom:12px">
+                Scansione automatica su schedule configurabile. Ultima esecuzione 2h fa.
+            </div>
+            <div class="fg">
+                <label class="fl">Frequenza</label>
+                <select class="fi">
+                    <option>Ogni ora</option>
+                    <option selected>Ogni 6 ore</option>
+                    <option>Ogni 24 ore</option>
+                    <option>Settimanale</option>
+                </select>
+            </div>
+            <button class="btn suc" style="width:100%">⏸ Sospendi Schedule</button>
+        </div>
+
+        <!-- NAC -->
+        <div class="card">
+            <div style="font-size:28px;margin-bottom:10px">🔐</div>
+            <div class="card-title">Discovery via NAC</div>
+            <div style="font-size:12px;color:var(--t3);line-height:1.6;margin-bottom:12px">
+                Integrazione con Network Access Control. Registra automaticamente i dispositivi all'accesso.
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                <span style="width:8px;height:8px;border-radius:50%;background:var(--acc3)" class="pulse"></span>
+                <span style="font-size:11px;color:var(--acc3);font-weight:600">Connesso — Cisco ISE</span>
+            </div>
+            <button class="btn" style="width:100%">⚙ Configura NAC</button>
+        </div>
+    </div>
+
+    <!-- Discovery Results -->
+    <div class="card">
+        <div class="card-title" style="margin-bottom:12px">
+            Risultati Discovery
+            <span style="margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--t4);font-weight:400">
+                Ultima scansione: @DateTime.UtcNow.AddHours(-2).ToString("dd/MM HH:mm")
+            </span>
+        </div>
+        <div class="tbl-wrap">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>IP</th>
+                        <th>Hostname</th>
+                        <th>Tipo</th>
+                        <th>OS Rilevato</th>
+                        <th>Metodo</th>
+                        <th>Stato CMDB</th>
+                        <th>Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in DiscoveryResults)
+                    {
+                        <tr>
+                            <td>@r.Ip</td>
+                            <td style="font-size:12px;color:var(--t1);font-weight:600">@r.Hostname</td>
+                            <td><span class="tag">@r.Type</span></td>
+                            <td style="font-size:11px;color:var(--t3)">@r.Os</td>
+                            <td style="font-size:11px;color:var(--t4)">@r.Method</td>
+                            <td>
+                                @if (r.InCmdb)
+                                {
+                                    <span style="font-size:10px;font-weight:700;color:var(--acc3);background:rgba(48,196,141,.1);padding:2px 8px;border-radius:10px">✓ In CMDB</span>
+                                }
+                                else
+                                {
+                                    <span style="font-size:10px;font-weight:700;color:var(--acc4);background:rgba(255,176,32,.1);padding:2px 8px;border-radius:10px">★ Nuovo</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!r.InCmdb)
+                                {
+                                    <button class="btn sm pri">+ Aggiungi</button>
+                                }
+                                else
+                                {
+                                    <button class="btn sm">🔗 Vedi CI</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     TAB: AGENTS
+════════════════════════════════════════════════════════════════════ -->
+<div style="display:@(ActiveTab == "agents" ? "block" : "none")">
+
+    <!-- KPIs -->
+    <div class="kpi-grid" style="margin-bottom:16px">
+        <KpiCard Value="@CIsWithAgent.Count().ToString()" Label="Agent Attivi" Color="var(--acc3)" />
+        <KpiCard Value="@CIsWithoutAgent.Count().ToString()" Label="Senza Agent" Color="var(--acc2)" />
+        <KpiCard Value="@CIs.Count(c => c.HasAgent && c.AgentVersion != "3.12.1").ToString()" Label="Aggiornamento Disponibile" Color="var(--acc4)" />
+        <KpiCard Value="@($"{(CIs.Count > 0 ? (int)(CIsWithAgent.Count() * 100.0 / CIs.Count) : 0)}%")" Label="Copertura Agent" Color="var(--acc)" />
+    </div>
+
+    <!-- Two columns -->
+    <div class="grid2">
+
+        <!-- CIs with Agent -->
+        <div class="card">
+            <div class="card-title">CI con Agent Installato</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                @foreach (var ci in CIsWithAgent)
+                {
+                    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--bdr)">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ci.Name</div>
+                            <div style="font-size:10px;color:var(--t4);font-family:var(--mono);margin-top:2px">v@ci.AgentVersion · @(ci.IpAddress ?? "—")</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                            <span style="width:7px;height:7px;border-radius:50%;background:@(ci.Status == CIStatus.Active ? "var(--acc3)" : ci.Status == CIStatus.Degraded ? "var(--acc4)" : "var(--acc2)")"></span>
+                            <span style="font-size:10px;color:var(--t3)">@ci.Status</span>
+                        </div>
+                        <div style="display:flex;gap:5px;flex-shrink:0">
+                            <button class="btn sm" title="Restart Agent">↺</button>
+                            @if (ci.AgentVersion != "3.12.1")
+                            {
+                                <button class="btn sm warn" title="Aggiorna Agent">↑</button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- CIs without Agent -->
+        <div class="card">
+            <div class="card-title">CI senza Agent</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                @foreach (var ci in CIsWithoutAgent)
+                {
+                    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--bdr)">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ci.Name</div>
+                            <div style="font-size:10px;color:var(--t4);margin-top:2px">@ci.Type · @(ci.IpAddress ?? "—")</div>
+                        </div>
+                        <span style="font-size:10px;color:var(--t4);font-style:italic;flex-shrink:0">
+                            @(ci.SnmpVersion != null ? "SNMP only" : "Non monitorato")
+                        </span>
+                        <button class="btn sm pri" style="flex-shrink:0">⬇ Deploy</button>
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     TAB: SNMP
+════════════════════════════════════════════════════════════════════ -->
+<div style="display:@(ActiveTab == "snmp" ? "block" : "none")">
+
+    <div class="grid2" style="align-items:start">
+
+        <!-- Config form -->
+        <div class="card">
+            <div class="card-title">Configurazione SNMP</div>
+            <div class="fgrid c2">
+                <div class="fg">
+                    <label class="fl">Versione SNMP</label>
+                    <select class="fi" @bind="SnmpVersion">
+                        <option value="v1">v1</option>
+                        <option value="v2c">v2c</option>
+                        <option value="v3">v3</option>
+                    </select>
+                </div>
+                <div class="fg">
+                    <label class="fl">Porta</label>
+                    <input class="fi" value="161" style="font-family:var(--mono)" />
+                </div>
+                <div class="fg" style="grid-column:1/-1">
+                    <label class="fl">Community String</label>
+                    <input class="fi" @bind="SnmpCommunity" placeholder="public" style="font-family:var(--mono)" />
+                </div>
+                @if (SnmpVersion == "v3")
+                {
+                    <div class="fg">
+                        <label class="fl">Username</label>
+                        <input class="fi" @bind="SnmpUser" placeholder="snmpv3user" />
+                    </div>
+                    <div class="fg">
+                        <label class="fl">Auth Protocol</label>
+                        <select class="fi">
+                            <option>SHA</option>
+                            <option>MD5</option>
+                        </select>
+                    </div>
+                    <div class="fg" style="grid-column:1/-1">
+                        <label class="fl">Auth Password</label>
+                        <input class="fi" type="password" placeholder="••••••••" />
+                    </div>
+                    <div class="fg">
+                        <label class="fl">Privacy Protocol</label>
+                        <select class="fi">
+                            <option>AES</option>
+                            <option>DES</option>
+                        </select>
+                    </div>
+                    <div class="fg">
+                        <label class="fl">Privacy Password</label>
+                        <input class="fi" type="password" placeholder="••••••••" />
+                    </div>
+                }
+                <div class="fg">
+                    <label class="fl">Timeout (sec)</label>
+                    <input class="fi" @bind="SnmpTimeout" type="number" min="1" max="60" style="font-family:var(--mono)" />
+                </div>
+                <div class="fg">
+                    <label class="fl">Retry</label>
+                    <input class="fi" @bind="SnmpRetries" type="number" min="0" max="5" style="font-family:var(--mono)" />
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
+                <button class="btn">Test</button>
+                <button class="btn pri">💾 Salva Config</button>
+            </div>
+        </div>
+
+        <!-- OID table -->
+        <div class="card">
+            <div class="card-title">OID Monitorati</div>
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>OID</th>
+                        <th>Descrizione</th>
+                        <th>Ultimo Valore</th>
+                        <th>Aggiornato</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var oid in MockOids)
+                    {
+                        <tr>
+                            <td style="font-family:var(--mono);font-size:10px;color:var(--acc)">@oid.Oid</td>
+                            <td style="font-size:11px;color:var(--t2)">@oid.Description</td>
+                            <td style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--t1)">@oid.LastValue</td>
+                            <td style="font-size:10px;color:var(--t4);font-family:var(--mono)">@FormatRelative(oid.LastUpdated)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- SNMP Devices -->
+    <div class="card" style="margin-top:14px">
+        <div class="card-title">Dispositivi SNMP</div>
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>CI</th>
+                    <th>Tipo</th>
+                    <th>IP</th>
+                    <th>Versione SNMP</th>
+                    <th>Status</th>
+                    <th>Ultimo Poll</th>
+                    <th>Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var ci in CIsWithSnmp)
+                {
+                    <tr>
+                        <td style="font-weight:600;color:var(--t1)">@ci.Name</td>
+                        <td><span class="tag">@ci.Type</span></td>
+                        <td style="font-family:var(--mono);font-size:11px;color:var(--t2)">@(ci.IpAddress ?? "—")</td>
+                        <td>
+                            <span style="background:rgba(75,158,255,.1);color:var(--acc);padding:2px 8px;border-radius:3px;font-family:var(--mono);font-size:11px">@ci.SnmpVersion</span>
+                        </td>
+                        <td>@CiStatusBadge(ci.Status)</td>
+                        <td style="font-size:11px;color:var(--t4);font-family:var(--mono)">@FormatRelative(ci.LastSeen)</td>
+                        <td>
+                            <div style="display:flex;gap:5px">
+                                <button class="btn sm">📡 Poll</button>
+                                <button class="btn sm">⚙ Config</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    // ── State ──────────────────────────────────────────────────────────
+    private string ActiveTab = "inventory";
+    private string InvSearch = "";
+    private string FilterTypeVal = "";
+    private string FilterStatusVal = "";
+    private ConfigurationItem? SelectedCI;
+
+    // Discovery
+    private string DiscoveryRange = "";
+
+    // SNMP
+    private string SnmpVersion = "v2c";
+    private string SnmpCommunity = "public";
+    private string SnmpUser = "";
+    private int SnmpTimeout = 5;
+    private int SnmpRetries = 2;
+
+    // ── Data ───────────────────────────────────────────────────────────
+    private List<ConfigurationItem> CIs = [];
+
+    private IEnumerable<string> CiTypes => CIs.Select(c => c.Type).Distinct().Order();
+
+    private IEnumerable<ConfigurationItem> FilteredCIs => CIs.Where(ci =>
+    {
+        if (!string.IsNullOrEmpty(InvSearch) &&
+            !ci.Name.Contains(InvSearch, StringComparison.OrdinalIgnoreCase) &&
+            !(ci.IpAddress?.Contains(InvSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+            return false;
+        if (!string.IsNullOrEmpty(FilterTypeVal) && ci.Type != FilterTypeVal)
+            return false;
+        if (!string.IsNullOrEmpty(FilterStatusVal) &&
+            !Enum.TryParse<CIStatus>(FilterStatusVal, out var fs) |
+            (Enum.TryParse<CIStatus>(FilterStatusVal, out var fs2) && ci.Status != fs2))
+            return false;
+        return true;
+    });
+
+    private IEnumerable<ConfigurationItem> CIsWithAgent => CIs.Where(c => c.HasAgent);
+    private IEnumerable<ConfigurationItem> CIsWithoutAgent => CIs.Where(c => !c.HasAgent);
+    private IEnumerable<ConfigurationItem> CIsWithSnmp => CIs.Where(c => !string.IsNullOrEmpty(c.SnmpVersion));
+
+    // ── Mock discovery results ─────────────────────────────────────────
+    private record DiscoveryResult(string Ip, string Hostname, string Type, string Os, string Method, bool InCmdb);
+
+    private readonly List<DiscoveryResult> DiscoveryResults =
+    [
+        new("10.0.1.55",  "SRV-TEST-01",  "Server",       "Windows Server 2022",  "Nmap / SMB",   false),
+        new("10.0.1.56",  "SRV-TEST-02",  "Server",       "Ubuntu 20.04",         "Nmap / SSH",   false),
+        new("10.0.0.1",   "FW-FORTINET-01","Firewall",    "FortiOS 7.2.6",        "SNMP",         true),
+        new("10.0.0.10",  "SW-CORE-01",   "Switch",       "Cisco IOS 17.6",       "SNMP",         true),
+        new("192.168.1.50","AP-WIFI-02",  "Access Point", "UniFi OS 3.1",         "NAC / RADIUS", false),
+    ];
+
+    // ── Mock OIDs ──────────────────────────────────────────────────────
+    private record OidEntry(string Oid, string Description, string LastValue, DateTime? LastUpdated);
+
+    private readonly List<OidEntry> MockOids =
+    [
+        new("1.3.6.1.2.1.1.3.0",       "sysUpTime — Uptime sistema",      "14 giorni 6h",      DateTime.UtcNow.AddMinutes(-5)),
+        new("1.3.6.1.2.1.2.2.1.10.1",  "ifInOctets — Traffico IN (eth0)", "1.24 GB",           DateTime.UtcNow.AddMinutes(-1)),
+        new("1.3.6.1.2.1.2.2.1.16.1",  "ifOutOctets — Traffico OUT (eth0)","876 MB",           DateTime.UtcNow.AddMinutes(-1)),
+        new("1.3.6.1.4.1.2021.10.1.3.1","laLoad — CPU Load Average 1m",   "0.42",              DateTime.UtcNow.AddSeconds(-30)),
+    ];
+
+    // ── Lifecycle ──────────────────────────────────────────────────────
+    protected override void OnInitialized()
+    {
+        var now = DateTime.UtcNow;
+
+        CIs =
+        [
+            new ConfigurationItem
+            {
+                Id = "CI-001", Name = "SRV-PROD-01", Type = "Server",
+                IpAddress = "10.0.1.10", OperatingSystem = "Windows Server 2022",
+                Status = CIStatus.Active, Criticality = CICriticality.Critical,
+                HasAgent = true, AgentVersion = "3.12.1",
+                LastSeen = now.AddMinutes(-3), TicketCount = 2,
+                Location = "Rack A1 - DC Milano", Tags = ["production","windows"],
+                Services = ["Exchange","IIS"], CreatedAt = now.AddDays(-180)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-002", Name = "SRV-DB-01", Type = "Database Server",
+                IpAddress = "10.0.1.11", OperatingSystem = "Ubuntu 22.04",
+                Status = CIStatus.Active, Criticality = CICriticality.Critical,
+                HasAgent = true, AgentVersion = "3.12.1",
+                LastSeen = now.AddMinutes(-2), TicketCount = 1,
+                Location = "Rack A2 - DC Milano", Tags = ["database","linux"],
+                Services = ["MySQL","PostgreSQL"], CreatedAt = now.AddDays(-365)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-003", Name = "FW-FORTINET-01", Type = "Firewall",
+                IpAddress = "10.0.0.1", OperatingSystem = "FortiOS 7.2.6",
+                Status = CIStatus.Active, Criticality = CICriticality.Critical,
+                HasAgent = false, SnmpVersion = "v3",
+                LastSeen = now.AddMinutes(-1), TicketCount = 0,
+                Vendor = "Fortinet", Model = "FortiGate 200F",
+                Location = "Rack N1 - DC Milano", Tags = ["network","firewall"],
+                CreatedAt = now.AddDays(-500)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-004", Name = "SW-CORE-01", Type = "Switch",
+                IpAddress = "10.0.0.10", OperatingSystem = "Cisco IOS 17.6",
+                Status = CIStatus.Active, Criticality = CICriticality.High,
+                HasAgent = false, SnmpVersion = "v2c",
+                LastSeen = now.AddMinutes(-4), TicketCount = 0,
+                Vendor = "Cisco", Model = "Catalyst 9300",
+                Location = "Rack N2 - DC Milano", Tags = ["network","switch"],
+                CreatedAt = now.AddDays(-400)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-005", Name = "SRV-MAIL-01", Type = "Email Server",
+                IpAddress = "10.0.1.20", OperatingSystem = "Windows Server 2019",
+                Status = CIStatus.Degraded, Criticality = CICriticality.Critical,
+                HasAgent = true, AgentVersion = "3.11.5",
+                LastSeen = now.AddMinutes(-15), TicketCount = 3,
+                Location = "Rack A3 - DC Milano", Tags = ["mail","exchange","windows"],
+                Services = ["Exchange 2019"], CreatedAt = now.AddDays(-730)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-006", Name = "DC-01", Type = "Domain Controller",
+                IpAddress = "10.0.1.5", OperatingSystem = "Windows Server 2022",
+                Status = CIStatus.Active, Criticality = CICriticality.Critical,
+                HasAgent = true, AgentVersion = "3.12.1",
+                LastSeen = now.AddMinutes(-2), TicketCount = 0,
+                Location = "Rack A1 - DC Milano", Tags = ["ad","windows","infrastructure"],
+                Services = ["Active Directory","DNS","DHCP"], CreatedAt = now.AddDays(-900)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-007", Name = "NAS-01", Type = "File Server",
+                IpAddress = "10.0.1.30", OperatingSystem = "Synology DSM 7.2",
+                Status = CIStatus.Offline, Criticality = CICriticality.High,
+                HasAgent = false,
+                LastSeen = now.AddHours(-8), TicketCount = 2,
+                Vendor = "Synology", Model = "DS923+",
+                Location = "Rack B1 - DC Milano", Tags = ["storage","nas"],
+                Services = ["SMB","NFS"], CreatedAt = now.AddDays(-600)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-008", Name = "AP-WIFI-01", Type = "Access Point",
+                IpAddress = "192.168.1.1", OperatingSystem = "UniFi OS 3.1",
+                Status = CIStatus.Active, Criticality = CICriticality.Medium,
+                HasAgent = false, SnmpVersion = "v2c",
+                LastSeen = now.AddMinutes(-10), TicketCount = 1,
+                Vendor = "Ubiquiti", Model = "UniFi U6-LR",
+                Location = "Piano 1 - Sala B2", Tags = ["wifi","network"],
+                CreatedAt = now.AddDays(-200)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-009", Name = "PC-MROSSI", Type = "Workstation",
+                IpAddress = "10.0.1.45", OperatingSystem = "Windows 11 Pro",
+                Status = CIStatus.Active, Criticality = CICriticality.Low,
+                HasAgent = false,
+                LastSeen = now.AddHours(-1), TicketCount = 0,
+                Owner = "Marco Rossi", Location = "Piano 2 - Postazione 14",
+                Tags = ["workstation","windows"], CreatedAt = now.AddDays(-120)
+            },
+            new ConfigurationItem
+            {
+                Id = "CI-010", Name = "PRINTER-HR", Type = "Printer",
+                IpAddress = "10.0.1.200", OperatingSystem = "HP JetDirect",
+                Status = CIStatus.Active, Criticality = CICriticality.Low,
+                HasAgent = false, SnmpVersion = "v2c",
+                LastSeen = now.AddHours(-3), TicketCount = 1,
+                Vendor = "HP", Model = "LaserJet Enterprise M507",
+                Location = "Piano 3 - HR Office", Tags = ["printer","hp"],
+                CreatedAt = now.AddDays(-365)
+            },
+        ];
+    }
+
+    // ── Handlers ───────────────────────────────────────────────────────
+    private void SelectCI(ConfigurationItem ci)
+    {
+        SelectedCI = SelectedCI?.Id == ci.Id ? null : ci;
+    }
+
+    private void OnFilterType(ChangeEventArgs e)
+    {
+        FilterTypeVal = e.Value?.ToString() ?? "";
+        SelectedCI = null;
+    }
+
+    private void OnFilterStatus(ChangeEventArgs e)
+    {
+        FilterStatusVal = e.Value?.ToString() ?? "";
+        SelectedCI = null;
+    }
+
+    private void RunManualDiscovery()
+    {
+        // Mock: in a real app would trigger a background scan
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────
+    private static string FormatRelative(DateTime? dt)
+    {
+        if (dt == null) return "—";
+        var diff = DateTime.UtcNow - dt.Value;
+        if (diff.TotalSeconds < 60) return $"{(int)diff.TotalSeconds}s fa";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m fa";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h fa";
+        return $"{(int)diff.TotalDays}g fa";
+    }
+
+    private static string CritColor(CICriticality c) => c switch
+    {
+        CICriticality.Critical => "var(--acc2)",
+        CICriticality.High     => "var(--acc6)",
+        CICriticality.Medium   => "var(--acc4)",
+        _                      => "var(--t4)"
+    };
+
+    private static RenderFragment CiStatusBadge(CIStatus s) => s switch
+    {
+        CIStatus.Active        => @<span class="status" style="background:rgba(48,196,141,.12);color:var(--acc3)">● Active</span>,
+        CIStatus.Degraded      => @<span class="status" style="background:rgba(255,176,32,.12);color:var(--acc4)">◐ Degraded</span>,
+        CIStatus.Offline       => @<span class="status" style="background:rgba(255,77,109,.12);color:var(--acc2)">○ Offline</span>,
+        CIStatus.Maintenance   => @<span class="status" style="background:rgba(201,123,255,.12);color:var(--acc5)">⚙ Maintenance</span>,
+        CIStatus.Decommissioned=> @<span class="status" style="background:rgba(74,86,104,.15);color:var(--t4)">✕ Decommissioned</span>,
+        _                      => @<span class="status">@s</span>,
+    };
+}

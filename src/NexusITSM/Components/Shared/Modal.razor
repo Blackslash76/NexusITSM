@@ -1,0 +1,30 @@
+<div class="mo-overlay @(IsOpen ? "open" : "")" @onclick="Close">
+    <div class="mo @SizeClass" @onclick:stopPropagation="true">
+        <div class="mo-head">
+            <span class="mo-title">@Title</span>
+            <button class="mo-close" @onclick="Close">&times;</button>
+        </div>
+        <div class="mo-body">
+            @ChildContent
+        </div>
+        @if (Footer != null)
+        {
+            <div class="mo-foot">
+                @Footer
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "Modal";
+    [Parameter] public string Size { get; set; } = ""; // "", "lg", "xl"
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string SizeClass => Size switch { "lg" => "lg", "xl" => "xl", _ => "" };
+
+    private async Task Close() => await OnClose.InvokeAsync();
+}

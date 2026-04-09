@@ -1,0 +1,80 @@
+@inject NavigationManager Nav
+
+<div class="sidebar @(Collapsed ? "collapsed" : "")" id="sidebar">
+    <div class="sb-logo">
+        <div class="sb-logo-icon">N</div>
+        <div>
+            <div class="sb-logo-text">NexusITSM</div>
+            <div class="sb-logo-sub">Enterprise v4</div>
+        </div>
+        <button class="sb-toggle" @onclick="Toggle" title="Collapse">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+    </div>
+    <nav class="sb-nav">
+        <div class="sb-section">CORE</div>
+        <NavItem Href="" Icon="dashboard" Label="Dashboard" />
+        <NavItem Href="incidents" Icon="incidents" Label="Incidents" BadgeCount="@IncidentCount" />
+        <NavItem Href="problems" Icon="problems" Label="Problems" BadgeCount="@ProblemCount" />
+        <NavItem Href="changes" Icon="changes" Label="Changes" />
+        <NavItem Href="catalog" Icon="catalog" Label="Service Catalog" />
+
+        <div class="sb-section">AUTOMATION</div>
+        <NavItem Href="workflow" Icon="workflow" Label="Workflow Builder" />
+        <NavItem Href="escalation" Icon="escalation" Label="Escalation Matrix" />
+        <NavItem Href="sla" Icon="sla" Label="SLA Engine" />
+        <NavItem Href="email" Icon="email" Label="Email Grabber" />
+
+        <div class="sb-section">ASSET &amp; CMDB</div>
+        <NavItem Href="cmdb" Icon="cmdb" Label="CMDB / Assets" />
+
+        <div class="sb-section">ANALYTICS</div>
+        <NavItem Href="reports" Icon="reports" Label="Reports" />
+        <NavItem Href="integrations" Icon="integrations" Label="Integrazioni Ext." />
+
+        <div class="sb-section">GOVERNANCE</div>
+        <NavItem Href="governance" Icon="governance" Label="Governance" ShowAlert="true" />
+
+        <div class="sb-section">UTENTI</div>
+        <NavItem Href="portal" Icon="portal" Label="User Portal" />
+        <NavItem Href="settings" Icon="settings" Label="Settings" />
+    </nav>
+    <div class="sb-user">
+        <div class="sb-avatar" style="background:@UserColor">@UserInitials</div>
+        <div class="sb-user-info">
+            <div class="sb-user-name">@UserName</div>
+            <div class="sb-user-role">@UserRole</div>
+        </div>
+        <a href="/api/auth/logout" style="font-size:11px;color:var(--t4);text-decoration:none;margin-left:auto" title="Logout">⏻</a>
+    </div>
+</div>
+
+@code {
+    [Inject] private NexusITSM.Services.DemoDataService Data { get; set; } = default!;
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool Collapsed;
+    private int IncidentCount = 12;
+    private int ProblemCount = 2;
+    private string UserName = "Guest";
+    private string UserInitials = "?";
+    private string UserRole = "";
+    private string UserColor = "#4B9EFF";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState != null)
+        {
+            var state = await AuthState;
+            if (state.User.Identity?.IsAuthenticated == true)
+            {
+                UserName = state.User.Identity.Name ?? "User";
+                UserInitials = string.Join("", UserName.Split('@')[0].Split('.', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpper(w[0])));
+                UserRole = state.User.IsInRole("Admin") ? "Admin" : state.User.IsInRole("Operator") ? "Operator" : "User";
+            }
+        }
+    }
+
+    private void Toggle() => Collapsed = !Collapsed;
+}

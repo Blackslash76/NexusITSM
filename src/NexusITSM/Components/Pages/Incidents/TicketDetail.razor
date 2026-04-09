@@ -1,0 +1,150 @@
+@{
+    var slaRemMs = (Ticket.SlaBreachAt - DateTime.UtcNow).TotalHours;
+    var slaColor = Ticket.SlaStatus == SlaStatus.Breach ? "var(--acc2)" : Ticket.SlaStatus == SlaStatus.Warning ? "var(--acc4)" : "var(--acc3)";
+    var slaBg = Ticket.SlaStatus == SlaStatus.Breach ? "rgba(255,77,109,.1)" : Ticket.SlaStatus == SlaStatus.Warning ? "rgba(255,176,32,.08)" : "rgba(48,196,141,.07)";
+    var slaBorder = Ticket.SlaStatus == SlaStatus.Breach ? "rgba(255,77,109,.25)" : Ticket.SlaStatus == SlaStatus.Warning ? "rgba(255,176,32,.2)" : "rgba(48,196,141,.15)";
+}
+
+<div style="height:calc(100vh - 180px);overflow-y:auto;border:1px solid var(--bdr);border-radius:var(--rl)">
+    <!-- Header -->
+    <div style="padding:14px 16px;border-bottom:1px solid var(--bdr);background:var(--bg2)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+            <div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--acc);margin-bottom:3px">@Ticket.Id</div>
+                <div style="font-size:14px;font-weight:700;color:var(--t1);line-height:1.3">@Ticket.Title</div>
+            </div>
+            <PrioBadge Priority="@Ticket.Priority" />
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <StatusBadge Status="@Ticket.Status" />
+            @foreach (var tag in Ticket.Tags)
+            {
+                <span class="tag">@tag</span>
+            }
+        </div>
+    </div>
+
+    <!-- Fields -->
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">
+            @foreach (var (k, v) in new[] { ("Richiedente", Ticket.Requester ?? "—"), ("Reparto", Ticket.Department ?? "—"), ("Categoria", Ticket.Category.ToString()), ("Gruppo", Ticket.Group?.Name ?? "—"), ("Creato", Ticket.CreatedAt.ToString("dd/MM HH:mm")) })
+            {
+                <div>
+                    <div style="color:var(--t4);margin-bottom:1px">@k</div>
+                    <div style="color:var(--t1);font-weight:600">@v</div>
+                </div>
+            }
+        </div>
+
+        <!-- SLA Box -->
+        <div style="margin-top:8px;padding:8px 10px;background:@slaBg;border-radius:var(--r);border:1px solid @slaBorder">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t4)">SLA</span>
+                <span style="font-size:11px;font-family:var(--mono);color:@slaColor">
+                    @if (Ticket.SlaStatus == SlaStatus.Breach) { <text>BREACH</text> }
+                    else if (slaRemMs > 0) { <text>@((int)slaRemMs)h rimanenti</text> }
+                    else { <text>Scaduto</text> }
+                </span>
+            </div>
+            <div style="height:6px;background:var(--bg4);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:@(Math.Min(100, Ticket.SlaPercent))%;background:@slaColor;border-radius:3px"></div>
+            </div>
+            <div style="font-size:10px;color:var(--t4);margin-top:3px;font-family:var(--mono)">Scade: @Ticket.SlaBreachAt.ToString("dd/MM HH:mm")</div>
+        </div>
+    </div>
+
+    <!-- Assignee -->
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr)">
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Assegnazione</div>
+        <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--bg3);border-radius:var(--r)">
+            <div style="width:32px;height:32px;border-radius:50%;background:@(Ticket.Assignee?.Color ?? "#4B9EFF");display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000">@(Ticket.Assignee?.Initials ?? "?")</div>
+            <div>
+                <div style="font-size:13px;font-weight:600;color:var(--t1)">@(Ticket.Assignee?.FullName ?? "—")</div>
+                <div style="font-size:10px;color:var(--t4)">@(Ticket.Assignee?.Role) · @(Ticket.Assignee?.Department)</div>
+            </div>
+        </div>
+        @if (Ticket.EscalationLevel > EscalationLevel.None)
+        {
+            var levels = new[] { "", "L1 Support", "L2 Engineering", "Management" };
+            <div style="margin-top:8px;padding:7px 10px;background:rgba(201,123,255,.1);border:1px solid rgba(201,123,255,.25);border-radius:var(--r);display:flex;align-items:center;gap:7px">
+                <span style="color:var(--acc5);font-size:14px">▲</span>
+                <span style="font-size:11px;color:var(--acc5);font-weight:600">Escalato a L@((int)Ticket.EscalationLevel) — @levels[(int)Ticket.EscalationLevel]</span>
+            </div>
+        }
+    </div>
+
+    <!-- Timeline -->
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr)">
+        <div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Timeline</div>
+        @foreach (var ev in Ticket.Timeline.OrderByDescending(e => e.CreatedAt))
+        {
+            var dotClass = ev.Type switch
+            {
+                TimelineEventType.Created => "new",
+                TimelineEventType.Updated or TimelineEventType.Assigned or TimelineEventType.StatusChanged => "upd",
+                TimelineEventType.Escalated => "esc",
+                TimelineEventType.Resolved => "reso",
+                _ => "note"
+            };
+            var icon = ev.Type switch
+            {
+                TimelineEventType.Created => "●",
+                TimelineEventType.Updated or TimelineEventType.Assigned or TimelineEventType.StatusChanged => "◉",
+                TimelineEventType.Escalated => "▲",
+                TimelineEventType.Resolved => "✓",
+                _ => "○"
+            };
+            <div class="tl-item">
+                <div class="tl-dot @dotClass">@icon</div>
+                <div>
+                    <div class="tl-act">@ev.Actor <span class="tl-time">@FormatRelative(ev.CreatedAt)</span></div>
+                    <div class="tl-note">@ev.Message</div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Actions -->
+    <div style="padding:12px 16px">
+        <textarea class="fi" style="min-height:60px;width:100%;margin-bottom:8px;font-size:11px"
+                  placeholder="Aggiungi nota o aggiornamento…" @bind="NoteText"></textarea>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn suc sm" @onclick="AddNote">Aggiungi Nota</button>
+            <button class="btn sm" @onclick="() => ChangeStatus(TicketStatus.Resolved)">✓ Risolvi</button>
+            <button class="btn warn sm" @onclick="Escalate">▲ Escalate</button>
+            <button class="btn dan sm" @onclick="() => ChangeStatus(TicketStatus.Closed)">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Ticket Ticket { get; set; } = default!;
+    [Parameter] public List<AppUser> Agents { get; set; } = [];
+    [Parameter] public List<SupportGroup> Groups { get; set; } = [];
+    [Parameter] public EventCallback<(Ticket, TicketStatus)> OnStatusChange { get; set; }
+    [Parameter] public EventCallback<Ticket> OnEscalate { get; set; }
+    [Parameter] public EventCallback<(Ticket, string)> OnNoteAdded { get; set; }
+
+    private string NoteText = "";
+
+    private async Task ChangeStatus(TicketStatus status) =>
+        await OnStatusChange.InvokeAsync((Ticket, status));
+
+    private async Task Escalate() =>
+        await OnEscalate.InvokeAsync(Ticket);
+
+    private async Task AddNote()
+    {
+        if (string.IsNullOrWhiteSpace(NoteText)) return;
+        await OnNoteAdded.InvokeAsync((Ticket, NoteText));
+        NoteText = "";
+    }
+
+    private static string FormatRelative(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m fa";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h fa";
+        return $"{(int)diff.TotalDays}g fa";
+    }
+}

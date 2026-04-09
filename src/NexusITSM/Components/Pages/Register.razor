@@ -1,0 +1,67 @@
+@page "/register"
+@layout EmptyLayout
+@inject NavigationManager Nav
+
+<PageTitle>Registrazione — NexusITSM</PageTitle>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:var(--sans)">
+    <div style="width:380px">
+        <div style="text-align:center;margin-bottom:32px">
+            <div style="width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--acc3));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#fff;margin:0 auto 14px;font-family:var(--mono)">N</div>
+            <div style="font-size:20px;font-weight:700;color:var(--t1)">Crea Account</div>
+            <div style="font-size:11px;color:var(--t4);margin-top:3px">NexusITSM — ServiceDesk Enterprise</div>
+        </div>
+
+        <div class="card" style="padding:24px">
+            <form method="post" action="/api/auth/register">
+                <AntiforgeryToken />
+
+                @if (!string.IsNullOrEmpty(Error))
+                {
+                    <div style="padding:8px 12px;background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.25);border-radius:var(--r);margin-bottom:14px;font-size:11px;color:var(--acc2)">
+                        @ErrorMessage
+                    </div>
+                }
+
+                <div class="fg" style="margin-bottom:14px">
+                    <label class="fl">Nome completo</label>
+                    <input class="fi" type="text" name="FullName" required placeholder="Mario Rossi" style="width:100%" />
+                </div>
+
+                <div class="fg" style="margin-bottom:14px">
+                    <label class="fl">Email</label>
+                    <input class="fi" type="email" name="Email" required placeholder="nome@azienda.com" style="width:100%" />
+                </div>
+
+                <div class="fg" style="margin-bottom:14px">
+                    <label class="fl">Password</label>
+                    <input class="fi" type="password" name="Password" required placeholder="Minimo 6 caratteri" style="width:100%" />
+                </div>
+
+                <div class="fg" style="margin-bottom:18px">
+                    <label class="fl">Reparto</label>
+                    <input class="fi" type="text" name="Department" placeholder="Es: IT, HR, Finance" style="width:100%" />
+                </div>
+
+                <button type="submit" class="btn pri" style="width:100%;padding:10px;font-size:13px;font-weight:600">
+                    Registrati
+                </button>
+            </form>
+
+            <div style="text-align:center;margin-top:16px">
+                <a href="/login" style="font-size:11px;color:var(--acc);text-decoration:none">Hai già un account? Accedi</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    private string? ErrorMessage => Error switch
+    {
+        "exists" => "Email già registrata.",
+        "failed" => "Registrazione fallita. Riprova.",
+        _ => null
+    };
+}

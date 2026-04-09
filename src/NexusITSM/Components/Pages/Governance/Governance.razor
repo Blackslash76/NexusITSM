@@ -1,0 +1,297 @@
+@page "/governance"
+@inject NexusITSM.Services.DemoDataService Data
+
+@using NexusITSM.Models.Entities
+@using NexusITSM.Models.Enums
+@using NexusITSM.Components.Shared
+
+<PageTitle>Governance — NexusITSM</PageTitle>
+
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+    <div>
+        <div style="font-size:20px;font-weight:700;color:var(--t1)">Governance &amp; Compliance</div>
+        <div style="font-size:12px;color:var(--t4);margin-top:3px">Monitoraggio politiche, audit e registro rischi</div>
+    </div>
+    <div style="display:flex;gap:8px">
+        <span style="font-size:10px;font-family:var(--mono);color:var(--t4);padding:4px 10px;background:var(--bg3);border-radius:var(--r)">
+            Ultimo aggiornamento: @DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm") UTC
+        </span>
+    </div>
+</div>
+
+<!-- KPI row -->
+<div class="fgrid c4" style="margin-bottom:20px">
+    <KpiCard Value="87%" Label="Compliance Score" Color="var(--acc3)" Delta="+2% vs trimestre prec." IsUp="true" />
+    <KpiCard Value="3" Label="Open Findings" Color="var(--acc2)" Delta="1 critico" IsUp="false" />
+    <KpiCard Value="12" Label="Politiche Attive" Color="var(--acc)" Delta="2 in scadenza" IsUp="false" />
+    <KpiCard Value="@LastAuditDate" Label="Ultimo Audit" Color="var(--acc4)" />
+</div>
+
+<!-- Compliance Policies table -->
+<div class="card" style="margin-bottom:20px">
+    <div class="card-title" style="margin-bottom:14px">Politiche di Compliance</div>
+    <table class="tbl">
+        <thead>
+            <tr>
+                <th>Nome Politica</th>
+                <th>Categoria</th>
+                <th>Status</th>
+                <th>Scadenza</th>
+                <th>Responsabile</th>
+                <th>Azioni</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in Policies)
+            {
+                <tr>
+                    <td>
+                        <div style="font-size:12px;font-weight:600;color:var(--t1)">@p.Name</div>
+                        <div style="font-size:10px;color:var(--t4)">@p.Description</div>
+                    </td>
+                    <td><span class="tag" style="background:rgba(75,158,255,.12);color:var(--acc)">@p.Category</span></td>
+                    <td>
+                        @if (p.Status == "Compliant")
+                        {
+                            <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(48,196,141,.15);color:var(--acc3);font-weight:600">✓ Compliant</span>
+                        }
+                        else if (p.Status == "Non-Compliant")
+                        {
+                            <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(255,77,109,.15);color:var(--acc2);font-weight:600">✗ Non-Compliant</span>
+                        }
+                        else
+                        {
+                            <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(255,176,32,.15);color:var(--acc4);font-weight:600">⧖ In Review</span>
+                        }
+                    </td>
+                    <td style="font-size:11px;color:@(p.IsExpiringSoon ? "var(--acc2)" : "var(--t3)");font-family:var(--mono)">
+                        @p.Expiry
+                        @if (p.IsExpiringSoon)
+                        {
+                            <span style="font-size:9px;margin-left:4px;color:var(--acc2)">⚠</span>
+                        }
+                    </td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:6px">
+                            <div style="width:22px;height:22px;border-radius:50%;background:@p.ResponsabileColor;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000">@p.ResponsabileInitials</div>
+                            <span style="font-size:11px;color:var(--t2)">@p.Responsabile</span>
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn sm" @onclick="() => OpenPolicyDetail(p)">Dettagli</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Two-column: Findings + Risk Register -->
+<div class="fgrid c2" style="align-items:start">
+
+    <!-- Audit Findings -->
+    <div class="card">
+        <div class="card-title" style="margin-bottom:14px">Audit Findings</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+            @foreach (var f in AuditFindings)
+            {
+                <div style="border:1px solid var(--bdr);border-left:4px solid @SeverityColor(f.Severity);border-radius:var(--r);padding:12px;background:var(--bg2)">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                        <div style="flex:1">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                                <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.15);color:@SeverityColor(f.Severity);font-weight:700;border:1px solid @SeverityColor(f.Severity)">@f.Severity</span>
+                                <span style="font-size:10px;color:var(--t4)">@f.FindingId</span>
+                            </div>
+                            <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:4px">@f.Description</div>
+                            <div style="font-size:11px;color:var(--t3)">Remediation: <span style="font-family:var(--mono)">@f.RemediationDate</span></div>
+                        </div>
+                        <div>
+                            @if (f.Status == "Open")
+                            {
+                                <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,77,109,.15);color:var(--acc2)">Open</span>
+                            }
+                            else if (f.Status == "In Progress")
+                            {
+                                <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,176,32,.15);color:var(--acc4)">In Progress</span>
+                            }
+                            else
+                            {
+                                <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(48,196,141,.15);color:var(--acc3)">Closed</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Risk Register -->
+    <div class="card">
+        <div class="card-title" style="margin-bottom:14px">Risk Register</div>
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Rischio</th>
+                    <th style="text-align:center">Prob.</th>
+                    <th style="text-align:center">Impatto</th>
+                    <th>Mitigazione</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in RiskRegister)
+                {
+                    <tr>
+                        <td style="font-size:12px;font-weight:500;color:var(--t1)">@r.Description</td>
+                        <td style="text-align:center">
+                            <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:@RiskLevelBg(r.Probability);color:@RiskLevelColor(r.Probability);font-family:var(--mono);font-weight:700">@r.Probability</span>
+                        </td>
+                        <td style="text-align:center">
+                            <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:@RiskLevelBg(r.Impact);color:@RiskLevelColor(r.Impact);font-family:var(--mono);font-weight:700">@r.Impact</span>
+                        </td>
+                        <td style="font-size:11px;color:var(--t3)">@r.Mitigation</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Policy Detail Modal -->
+<Modal IsOpen="PolicyModalOpen" Title="@($"Politica: {SelectedPolicy?.Name}")" OnClose="CloseModal" Size="lg">
+    @if (SelectedPolicy != null)
+    {
+        <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:180px">
+                    <div style="font-size:10px;color:var(--t4);margin-bottom:4px">Categoria</div>
+                    <span class="tag">@SelectedPolicy.Category</span>
+                </div>
+                <div style="flex:1;min-width:180px">
+                    <div style="font-size:10px;color:var(--t4);margin-bottom:4px">Status</div>
+                    <div style="font-size:12px;font-weight:600;color:var(--t1)">@SelectedPolicy.Status</div>
+                </div>
+                <div style="flex:1;min-width:180px">
+                    <div style="font-size:10px;color:var(--t4);margin-bottom:4px">Scadenza</div>
+                    <div style="font-size:12px;font-family:var(--mono);color:var(--t2)">@SelectedPolicy.Expiry</div>
+                </div>
+            </div>
+            <div>
+                <div style="font-size:10px;color:var(--t4);margin-bottom:6px">Descrizione</div>
+                <div style="font-size:12px;color:var(--t2);line-height:1.6">@SelectedPolicy.LongDescription</div>
+            </div>
+            <div>
+                <div style="font-size:10px;color:var(--t4);margin-bottom:6px">Responsabile</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div style="width:28px;height:28px;border-radius:50%;background:@SelectedPolicy.ResponsabileColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000">@SelectedPolicy.ResponsabileInitials</div>
+                    <span style="font-size:12px;font-weight:600;color:var(--t1)">@SelectedPolicy.Responsabile</span>
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+            <button class="btn" @onclick="CloseModal">Chiudi</button>
+        </div>
+    }
+</Modal>
+
+@code {
+    private bool PolicyModalOpen;
+    private CompliancePolicy? SelectedPolicy;
+
+    private string LastAuditDate => DateTime.UtcNow.AddDays(-18).ToString("dd/MM/yyyy");
+
+    private record CompliancePolicy(
+        string Name, string Description, string LongDescription,
+        string Category, string Status, string Expiry, bool IsExpiringSoon,
+        string Responsabile, string ResponsabileInitials, string ResponsabileColor);
+
+    private static readonly CompliancePolicy[] Policies =
+    [
+        new("Password Policy",
+            "Requisiti complessità e scadenza password",
+            "Definisce i requisiti minimi di complessità delle password (min 12 caratteri, maiuscole, numeri, simboli), la scadenza ogni 90 giorni e il divieto di riutilizzo degli ultimi 12 password.",
+            "Identity", "Compliant", "30/06/2026", false,
+            "Paolo Conti", "PC", "#FF4D6D"),
+        new("Backup giornaliero",
+            "Backup dati critici con verifica integrità",
+            "Prevede backup giornaliero alle 02:00 UTC di tutti i sistemi critici, con verifica automatica dell'integrità e conservazione per 30 giorni on-site e 90 giorni off-site.",
+            "Operations", "Non-Compliant", "15/04/2026", true,
+            "Luca Ferrari", "LF", "#FFB020"),
+        new("Patch Management",
+            "Ciclo patching mensile per tutti i sistemi",
+            "Definisce il processo di valutazione, test e applicazione delle patch di sicurezza. Le patch critiche devono essere applicate entro 72 ore, le high entro 7 giorni, le medium entro 30 giorni.",
+            "Security", "In Review", "01/05/2026", false,
+            "Marco Rossi", "MR", "#4B9EFF"),
+        new("Access Review trimestrale",
+            "Revisione periodica privilegi e accessi",
+            "Prevede la revisione trimestrale di tutti gli account privilegiati, i permessi sulle cartelle condivise e gli accessi ai sistemi critici. Include la revoca immediata per i dipendenti uscenti.",
+            "Identity", "Compliant", "30/09/2026", false,
+            "Paolo Conti", "PC", "#FF4D6D"),
+        new("Incident Response Plan",
+            "Procedura gestione incident sicurezza",
+            "Documento formale che definisce ruoli, responsabilità e procedure da seguire in caso di security incident. Include playbook per le tipologie più comuni (ransomware, data breach, DDoS).",
+            "Security", "Compliant", "31/12/2026", false,
+            "Paolo Conti", "PC", "#FF4D6D"),
+        new("Data Retention 5 anni",
+            "Conservazione dati conformità normativa",
+            "Policy di conservazione dei dati aziendali conforme al GDPR e alle normative fiscali italiane. I dati di contabilità vengono conservati 10 anni, i log di sicurezza 2 anni, i dati HR 5 anni.",
+            "Compliance", "Compliant", "31/12/2028", false,
+            "Elena Russo", "ER", "#FF7846"),
+    ];
+
+    private record AuditFinding(string FindingId, string Severity, string Description, string Status, string RemediationDate);
+
+    private static readonly AuditFinding[] AuditFindings =
+    [
+        new("AF-001", "HIGH",   "Backup notturno fallito su NAS principale — 3 notti consecutive senza backup completo",       "Open",        "15/04/2026"),
+        new("AF-002", "MEDIUM", "Account service espirati non disabilitati — 7 account orfani trovati durante l'Access Review", "In Progress", "30/04/2026"),
+        new("AF-003", "LOW",    "Log retention incompleta su 2 server DMZ — periodo inferiore ai 90 giorni richiesti",          "In Progress", "01/05/2026"),
+    ];
+
+    private record RiskItem(string Description, string Probability, string Impact, string Mitigation);
+
+    private static readonly RiskItem[] RiskRegister =
+    [
+        new("Ransomware su infrastruttura core",  "Media",  "Critico", "EDR + backup offline + IR Plan"),
+        new("Interruzione provider cloud Azure",  "Bassa",  "Alto",    "Multi-cloud + SLA contrattuale"),
+        new("Data breach dati clienti",           "Bassa",  "Critico", "Encryption + DLP + audit trail"),
+    ];
+
+    private static string SeverityColor(string sev) => sev switch
+    {
+        "HIGH"   => "#FF4D6D",
+        "MEDIUM" => "#FFB020",
+        "LOW"    => "#4B9EFF",
+        _        => "var(--t4)"
+    };
+
+    private static string RiskLevelBg(string level) => level switch
+    {
+        "Critico" => "rgba(255,77,109,.15)",
+        "Alto"    => "rgba(255,120,70,.15)",
+        "Media"   => "rgba(255,176,32,.15)",
+        "Bassa"   => "rgba(75,158,255,.12)",
+        _         => "var(--bg3)"
+    };
+
+    private static string RiskLevelColor(string level) => level switch
+    {
+        "Critico" => "#FF4D6D",
+        "Alto"    => "#FF7846",
+        "Media"   => "#FFB020",
+        "Bassa"   => "#4B9EFF",
+        _         => "var(--t4)"
+    };
+
+    private void OpenPolicyDetail(CompliancePolicy p)
+    {
+        SelectedPolicy = p;
+        PolicyModalOpen = true;
+    }
+
+    private void CloseModal()
+    {
+        PolicyModalOpen = false;
+        SelectedPolicy = null;
+    }
+}

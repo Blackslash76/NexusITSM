@@ -1,0 +1,525 @@
+@page "/problems"
+@inject NexusITSM.Services.DemoDataService Data
+
+<PageTitle>Problems — NexusITSM</PageTitle>
+
+<!-- Toolbar -->
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <input class="fi" type="text" placeholder="Cerca problema…" style="padding:5px 10px;font-size:11px;width:220px"
+           @bind="SearchQuery" @bind:event="oninput" />
+    <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto" @onchange="OnFilterStatus">
+        <option value="">Tutti gli status</option>
+        @foreach (var s in Enum.GetValues<ProblemStatus>())
+        {
+            <option value="@s">@FormatProblemStatus(s)</option>
+        }
+    </select>
+    <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto" @onchange="OnFilterPriority">
+        <option value="">Tutte le priorità</option>
+        @foreach (var p in Enum.GetValues<TicketPriority>())
+        {
+            <option value="@p">@p</option>
+        }
+    </select>
+    <div style="margin-left:auto">
+        <button class="btn pri" @onclick="() => ShowNewProblem = true">+ Nuovo Problema</button>
+    </div>
+</div>
+
+<!-- Problems card grid (2 columns) -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px">
+    @foreach (var p in Filtered)
+    {
+        <div class="card" style="cursor:pointer;padding:14px 16px" @onclick="() => SelectProblem(p)">
+            <!-- Card header row -->
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+                <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                        <span style="font-family:var(--mono);font-size:10px;color:var(--t4)">@p.Id</span>
+                        @if (p.IsKnownError)
+                        {
+                            <span class="tag" style="background:rgba(201,123,255,.12);color:#C97BFF;border-color:rgba(201,123,255,.3);font-size:9px">KEDB</span>
+                        }
+                    </div>
+                    <div class="card-title" style="font-size:13px;font-weight:600;line-height:1.35;margin:0">@p.Title</div>
+                </div>
+            </div>
+
+            <!-- Badges row -->
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+                <PrioBadge Priority="@p.Priority" />
+                <span class="status @ProblemStatusCss(p.Status)">@ProblemStatusIcon(p.Status) @FormatProblemStatus(p.Status)</span>
+            </div>
+
+            <!-- RCA snippet -->
+            @if (!string.IsNullOrWhiteSpace(p.RootCauseAnalysis))
+            {
+                <div style="font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:8px;padding:8px;background:var(--bg3);border-radius:var(--r);border-left:3px solid var(--acc)">
+                    <span style="font-size:10px;font-weight:600;color:var(--t4);display:block;margin-bottom:2px">RCA</span>
+                    <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">@p.RootCauseAnalysis</span>
+                </div>
+            }
+
+            <!-- Workaround snippet -->
+            @if (!string.IsNullOrWhiteSpace(p.Workaround))
+            {
+                <div style="font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:8px;padding:6px 8px;background:rgba(48,196,141,.07);border-radius:var(--r);border-left:3px solid var(--acc3)">
+                    <span style="font-size:10px;font-weight:600;color:var(--acc3);display:block;margin-bottom:2px">Workaround</span>
+                    <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">@p.Workaround</span>
+                </div>
+            }
+
+            <!-- Footer row: assignee + incidents -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)">
+                <div style="display:flex;align-items:center;gap:5px">
+                    @if (p.Assignee != null)
+                    {
+                        <div style="width:22px;height:22px;border-radius:50%;background:@p.Assignee.Color;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000">@p.Assignee.Initials</div>
+                        <span style="font-size:11px;color:var(--t3)">@p.Assignee.FullName.Split(' ').FirstOrDefault()</span>
+                    }
+                    else
+                    {
+                        <span style="font-size:11px;color:var(--t4)">Non assegnato</span>
+                    }
+                </div>
+                <div style="display:flex;align-items:center;gap:4px">
+                    <span style="font-size:10px;color:var(--t4)">Incidents:</span>
+                    <span style="font-size:11px;font-weight:700;color:@(p.Incidents.Count > 0 ? "var(--acc2)" : "var(--t4)")">@p.Incidents.Count</span>
+                </div>
+            </div>
+        </div>
+    }
+    @if (!Filtered.Any())
+    {
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--t4);font-size:12px">
+            Nessun problema trovato con i filtri attuali.
+        </div>
+    }
+</div>
+
+<!-- Known Error Database (KEDB) -->
+@{
+    var kedb = Data.Problems.Where(p => p.IsKnownError).ToList();
+}
+@if (kedb.Any())
+{
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;font-weight:700;color:var(--t1)">Known Error Database (KEDB)</span>
+            <span class="tag" style="background:rgba(201,123,255,.12);color:#C97BFF;border-color:rgba(201,123,255,.3)">@kedb.Count</span>
+        </div>
+        <div class="tbl-wrap">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Titolo</th>
+                        <th>Priorità</th>
+                        <th>Status</th>
+                        <th>Workaround</th>
+                        <th>Assegnato</th>
+                        <th>Incidents</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in kedb)
+                    {
+                        <tr @onclick="() => SelectProblem(p)" style="cursor:pointer">
+                            <td style="font-family:var(--mono);font-size:10px;color:var(--t4);white-space:nowrap">@p.Id</td>
+                            <td style="max-width:280px">
+                                <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@p.Title">@p.Title</div>
+                            </td>
+                            <td><PrioBadge Priority="@p.Priority" /></td>
+                            <td>
+                                <span class="status @ProblemStatusCss(p.Status)">@ProblemStatusIcon(p.Status) @FormatProblemStatus(p.Status)</span>
+                            </td>
+                            <td style="max-width:240px">
+                                @if (!string.IsNullOrWhiteSpace(p.Workaround))
+                                {
+                                    <span style="font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block" title="@p.Workaround">@p.Workaround</span>
+                                }
+                                else
+                                {
+                                    <span style="font-size:11px;color:var(--t4)">—</span>
+                                }
+                            </td>
+                            <td>
+                                @if (p.Assignee != null)
+                                {
+                                    <div style="display:flex;align-items:center;gap:5px">
+                                        <div style="width:20px;height:20px;border-radius:50%;background:@p.Assignee.Color;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#000">@p.Assignee.Initials</div>
+                                        <span style="font-size:11px;color:var(--t2)">@p.Assignee.FullName.Split(' ').FirstOrDefault()</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span style="color:var(--t4)">—</span>
+                                }
+                            </td>
+                            <td style="text-align:center">
+                                <span style="font-size:12px;font-weight:700;color:@(p.Incidents.Count > 0 ? "var(--acc2)" : "var(--t4)")">@p.Incidents.Count</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<!-- ===== NEW PROBLEM MODAL ===== -->
+<Modal IsOpen="ShowNewProblem" Title="Nuovo Problema" OnClose="CloseNewProblem" Size="lg">
+    <div class="fgrid c2">
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Titolo <span class="req">*</span></label>
+            <input class="fi" @bind="NewTitle" placeholder="Descrizione breve del problema" />
+        </div>
+        <div class="fg">
+            <label class="fl">Priorità</label>
+            <select class="fi" @bind="NewPriority">
+                @foreach (var p in Enum.GetValues<TicketPriority>())
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">Assegnato a</label>
+            <select class="fi" @bind="NewAssigneeId">
+                <option value="">— Nessuno —</option>
+                @foreach (var a in Data.Agents)
+                {
+                    <option value="@a.Id">@a.FullName</option>
+                }
+            </select>
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Root Cause Analysis</label>
+            <textarea class="fi" @bind="NewRca" style="min-height:70px" placeholder="Descrizione dell'analisi della causa radice…"></textarea>
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Workaround</label>
+            <textarea class="fi" @bind="NewWorkaround" style="min-height:60px" placeholder="Soluzione temporanea disponibile…"></textarea>
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);cursor:pointer">
+                <input type="checkbox" @bind="NewIsKnownError" />
+                Classifica come Known Error (KEDB)
+            </label>
+        </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+        <button class="btn" @onclick="CloseNewProblem">Annulla</button>
+        <button class="btn pri" @onclick="CreateProblem">Crea Problema</button>
+    </div>
+</Modal>
+
+<!-- ===== PROBLEM DETAIL MODAL ===== -->
+@if (SelectedProblem != null)
+{
+    <Modal IsOpen="ShowDetail" Title="@($"{SelectedProblem.Id} — {SelectedProblem.Title}")" OnClose="CloseDetail" Size="xl">
+        <!-- Tabs -->
+        <div class="tabs" style="margin-bottom:16px">
+            @foreach (var tab in DetailTabs)
+            {
+                <button class="tab @(ActiveTab == tab ? "active" : "")" @onclick="() => ActiveTab = tab">@tab</button>
+            }
+        </div>
+
+        @if (ActiveTab == "Overview")
+        {
+            <div class="fgrid c2" style="gap:12px 20px">
+                <div class="fg">
+                    <label class="fl">ID</label>
+                    <div style="font-family:var(--mono);font-size:12px;color:var(--t2);padding:6px 0">@SelectedProblem.Id</div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Creato</label>
+                    <div style="font-size:12px;color:var(--t2);padding:6px 0">@SelectedProblem.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                </div>
+                <div class="fg" style="grid-column:1/-1">
+                    <label class="fl">Titolo</label>
+                    <div style="font-size:13px;font-weight:600;color:var(--t1);padding:6px 0">@SelectedProblem.Title</div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Priorità</label>
+                    <div style="padding:6px 0"><PrioBadge Priority="@SelectedProblem.Priority" /></div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Status</label>
+                    <div style="padding:6px 0">
+                        <span class="status @ProblemStatusCss(SelectedProblem.Status)">@ProblemStatusIcon(SelectedProblem.Status) @FormatProblemStatus(SelectedProblem.Status)</span>
+                    </div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Assegnato a</label>
+                    <div style="padding:6px 0">
+                        @if (SelectedProblem.Assignee != null)
+                        {
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <div style="width:24px;height:24px;border-radius:50%;background:@SelectedProblem.Assignee.Color;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000">@SelectedProblem.Assignee.Initials</div>
+                                <span style="font-size:12px;color:var(--t2)">@SelectedProblem.Assignee.FullName</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <span style="font-size:12px;color:var(--t4)">Non assegnato</span>
+                        }
+                    </div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Known Error (KEDB)</label>
+                    <div style="padding:6px 0">
+                        @if (SelectedProblem.IsKnownError)
+                        {
+                            <span class="tag" style="background:rgba(201,123,255,.12);color:#C97BFF;border-color:rgba(201,123,255,.3)">Si — In KEDB</span>
+                        }
+                        else
+                        {
+                            <span style="font-size:12px;color:var(--t4)">No</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else if (ActiveTab == "Root Cause Analysis")
+        {
+            <div style="display:flex;flex-direction:column;gap:16px">
+                <div class="fg">
+                    <label class="fl" style="margin-bottom:8px">Root Cause Analysis</label>
+                    @if (!string.IsNullOrWhiteSpace(SelectedProblem.RootCauseAnalysis))
+                    {
+                        <div style="padding:14px;background:var(--bg3);border-radius:var(--rl);border:1px solid var(--bdr);font-size:12px;color:var(--t2);line-height:1.7;white-space:pre-wrap">@SelectedProblem.RootCauseAnalysis</div>
+                    }
+                    else
+                    {
+                        <div style="padding:20px;text-align:center;color:var(--t4);font-size:12px;background:var(--bg3);border-radius:var(--rl);border:1px dashed var(--bdr)">
+                            Analisi non ancora disponibile
+                        </div>
+                    }
+                </div>
+                <div class="fg">
+                    <label class="fl" style="margin-bottom:8px">Workaround</label>
+                    @if (!string.IsNullOrWhiteSpace(SelectedProblem.Workaround))
+                    {
+                        <div style="padding:14px;background:rgba(48,196,141,.06);border-radius:var(--rl);border:1px solid rgba(48,196,141,.2);border-left:3px solid var(--acc3);font-size:12px;color:var(--t2);line-height:1.7;white-space:pre-wrap">@SelectedProblem.Workaround</div>
+                    }
+                    else
+                    {
+                        <div style="padding:20px;text-align:center;color:var(--t4);font-size:12px;background:var(--bg3);border-radius:var(--rl);border:1px dashed var(--bdr)">
+                            Nessun workaround disponibile
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else if (ActiveTab == "Incident Correlati")
+        {
+            @if (SelectedProblem.Incidents.Any())
+            {
+                <div class="tbl-wrap">
+                    <table class="tbl">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Titolo</th>
+                                <th>Priorità</th>
+                                <th>Status</th>
+                                <th>Richiedente</th>
+                                <th>Creato</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var inc in SelectedProblem.Incidents)
+                            {
+                                <tr>
+                                    <td style="font-family:var(--mono);font-size:10px;color:var(--t4);white-space:nowrap">@inc.Id</td>
+                                    <td style="max-width:260px">
+                                        <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@inc.Title">@inc.Title</div>
+                                    </td>
+                                    <td><PrioBadge Priority="@inc.Priority" /></td>
+                                    <td><StatusBadge Status="@inc.Status" /></td>
+                                    <td style="font-size:11px;color:var(--t3)">@inc.Requester</td>
+                                    <td style="font-size:11px;color:var(--t4);font-family:var(--mono);white-space:nowrap">@FormatRelative(inc.CreatedAt)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div style="padding:40px;text-align:center;color:var(--t4);font-size:12px">
+                    Nessun incident correlato a questo problema.
+                </div>
+            }
+        }
+        else if (ActiveTab == "Soluzione")
+        {
+            <div style="display:flex;flex-direction:column;gap:14px">
+                <div class="fg">
+                    <label class="fl">Status attuale</label>
+                    <div style="margin-top:6px;display:flex;align-items:center;gap:10px">
+                        <span class="status @ProblemStatusCss(SelectedProblem.Status)">@ProblemStatusIcon(SelectedProblem.Status) @FormatProblemStatus(SelectedProblem.Status)</span>
+                    </div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Aggiorna Status</label>
+                    <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+                        @foreach (var s in Enum.GetValues<ProblemStatus>())
+                        {
+                            <button class="btn sm @(SelectedProblem.Status == s ? "pri" : "")"
+                                    @onclick="() => UpdateProblemStatus(s)">
+                                @ProblemStatusIcon(s) @FormatProblemStatus(s)
+                            </button>
+                        }
+                    </div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Classifica come Known Error</label>
+                    <div style="margin-top:6px">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);cursor:pointer">
+                            <input type="checkbox" checked="@SelectedProblem.IsKnownError"
+                                   @onchange="e => SelectedProblem.IsKnownError = (bool)(e.Value ?? false)" />
+                            Registra nel Known Error Database (KEDB)
+                        </label>
+                    </div>
+                </div>
+                <div style="padding:14px;background:var(--bg3);border-radius:var(--rl);border:1px solid var(--bdr)">
+                    <div style="font-size:11px;font-weight:600;color:var(--t4);margin-bottom:6px">NOTA</div>
+                    <div style="font-size:12px;color:var(--t3);line-height:1.6">
+                        Quando un problema viene marcato come <strong>Resolved</strong> o <strong>Closed</strong>, tutti gli incident correlati
+                        devono essere aggiornati manualmente. Utilizza il tab "Incident Correlati" per verificarne lo stato.
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--bdr)">
+            <button class="btn" @onclick="CloseDetail">Chiudi</button>
+        </div>
+    </Modal>
+}
+
+@code {
+    private string SearchQuery = "";
+    private string FilterStatus = "";
+    private string FilterPriority = "";
+
+    // New problem form
+    private bool ShowNewProblem;
+    private string NewTitle = "";
+    private TicketPriority NewPriority = TicketPriority.Medium;
+    private string NewAssigneeId = "";
+    private string NewRca = "";
+    private string NewWorkaround = "";
+    private bool NewIsKnownError;
+
+    // Detail modal
+    private Problem? SelectedProblem;
+    private bool ShowDetail;
+    private string ActiveTab = "Overview";
+    private static readonly string[] DetailTabs = ["Overview", "Root Cause Analysis", "Incident Correlati", "Soluzione"];
+
+    // ID sequence
+    private int _probSeq = 2;
+    private string NextProblemId() => $"PRB-{++_probSeq:D3}";
+
+    private IEnumerable<Problem> Filtered => Data.Problems.Where(p =>
+    {
+        if (!string.IsNullOrEmpty(FilterStatus) && p.Status.ToString() != FilterStatus) return false;
+        if (!string.IsNullOrEmpty(FilterPriority) && p.Priority.ToString() != FilterPriority) return false;
+        if (!string.IsNullOrEmpty(SearchQuery) &&
+            !p.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) &&
+            !p.Id.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    });
+
+    private void OnFilterStatus(ChangeEventArgs e) => FilterStatus = e.Value?.ToString() ?? "";
+    private void OnFilterPriority(ChangeEventArgs e) => FilterPriority = e.Value?.ToString() ?? "";
+
+    private void SelectProblem(Problem p)
+    {
+        SelectedProblem = p;
+        ActiveTab = "Overview";
+        ShowDetail = true;
+    }
+
+    private void CloseDetail()
+    {
+        ShowDetail = false;
+        SelectedProblem = null;
+    }
+
+    private void CloseNewProblem() => ShowNewProblem = false;
+
+    private void CreateProblem()
+    {
+        if (string.IsNullOrWhiteSpace(NewTitle)) return;
+        var assignee = string.IsNullOrEmpty(NewAssigneeId) ? null : Data.Agents.FirstOrDefault(a => a.Id == NewAssigneeId);
+        var problem = new Problem
+        {
+            Id = NextProblemId(),
+            Title = NewTitle,
+            Priority = NewPriority,
+            Status = ProblemStatus.Open,
+            Assignee = assignee,
+            AssigneeId = assignee?.Id,
+            RootCauseAnalysis = string.IsNullOrWhiteSpace(NewRca) ? null : NewRca,
+            Workaround = string.IsNullOrWhiteSpace(NewWorkaround) ? null : NewWorkaround,
+            IsKnownError = NewIsKnownError,
+            CreatedAt = DateTime.UtcNow,
+            Incidents = []
+        };
+        Data.Problems.Insert(0, problem);
+        ShowNewProblem = false;
+        // Reset form
+        NewTitle = ""; NewPriority = TicketPriority.Medium; NewAssigneeId = "";
+        NewRca = ""; NewWorkaround = ""; NewIsKnownError = false;
+        // Open detail immediately
+        SelectProblem(problem);
+    }
+
+    private void UpdateProblemStatus(ProblemStatus newStatus)
+    {
+        if (SelectedProblem == null) return;
+        SelectedProblem.Status = newStatus;
+        if (newStatus == ProblemStatus.KnownError) SelectedProblem.IsKnownError = true;
+    }
+
+    // ProblemStatus helpers
+    private static string ProblemStatusCss(ProblemStatus s) => s switch
+    {
+        ProblemStatus.Open       => "st-open",
+        ProblemStatus.InAnalysis => "st-prog",
+        ProblemStatus.KnownError => "st-wait",
+        ProblemStatus.Resolved   => "st-reso",
+        ProblemStatus.Closed     => "st-clos",
+        _                        => "st-clos"
+    };
+
+    private static string ProblemStatusIcon(ProblemStatus s) => s switch
+    {
+        ProblemStatus.Open       => "○",
+        ProblemStatus.InAnalysis => "◉",
+        ProblemStatus.KnownError => "◷",
+        ProblemStatus.Resolved   => "✓",
+        ProblemStatus.Closed     => "—",
+        _                        => "○"
+    };
+
+    private static string FormatProblemStatus(ProblemStatus s) => s switch
+    {
+        ProblemStatus.InAnalysis => "In Analisi",
+        ProblemStatus.KnownError => "Known Error",
+        _                        => s.ToString()
+    };
+
+    private static string FormatRelative(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m fa";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h fa";
+        return $"{(int)diff.TotalDays}g fa";
+    }
+}

@@ -1,0 +1,37 @@
+<div class="toast-stack" id="toast-stack">
+    @foreach (var t in _toasts)
+    {
+        <div class="toast @t.CssClass">
+            @t.Message
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<ToastItem> _toasts = [];
+
+    public void Show(string message, string type = "inf")
+    {
+        _toasts.Add(new ToastItem(message, type));
+        StateHasChanged();
+        _ = RemoveAfterDelay(_toasts.Last());
+    }
+
+    private async Task RemoveAfterDelay(ToastItem item)
+    {
+        await Task.Delay(3000);
+        _toasts.Remove(item);
+        StateHasChanged();
+    }
+
+    private record ToastItem(string Message, string Type)
+    {
+        public string CssClass => Type switch
+        {
+            "suc" => "suc",
+            "err" => "err",
+            "wrn" => "wrn",
+            _ => "inf"
+        };
+    }
+}

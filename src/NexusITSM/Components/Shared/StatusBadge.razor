@@ -1,0 +1,40 @@
+@using NexusITSM.Models.Enums
+
+<span class="status @CssClass">@IconChar @Label</span>
+
+@code {
+    [Parameter] public TicketStatus Status { get; set; }
+
+    private string Label => Status switch
+    {
+        TicketStatus.Open => "Open",
+        TicketStatus.InProgress => "In Progress",
+        TicketStatus.Waiting => "Waiting",
+        TicketStatus.Escalated => "Escalated",
+        TicketStatus.Resolved => "Resolved",
+        TicketStatus.Closed => "Closed",
+        _ => Status.ToString()
+    };
+
+    private string CssClass => Status switch
+    {
+        TicketStatus.Open => "st-open",
+        TicketStatus.InProgress => "st-prog",
+        TicketStatus.Waiting => "st-wait",
+        TicketStatus.Escalated => "st-esc",
+        TicketStatus.Resolved => "st-reso",
+        TicketStatus.Closed => "st-clos",
+        _ => "st-clos"
+    };
+
+    private string IconChar => Status switch
+    {
+        TicketStatus.Open => "○",
+        TicketStatus.InProgress => "◉",
+        TicketStatus.Waiting => "◷",
+        TicketStatus.Escalated => "▲",
+        TicketStatus.Resolved => "✓",
+        TicketStatus.Closed => "—",
+        _ => "○"
+    };
+}

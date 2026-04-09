@@ -1,0 +1,16 @@
+<div class="kpi" style="--kpi-color: @Color">
+    <div class="kpi-val">@Value</div>
+    <div class="kpi-label">@Label</div>
+    @if (!string.IsNullOrEmpty(Delta))
+    {
+        <div class="kpi-delta @(IsUp ? "up" : "dn")">@Delta</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "0";
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Color { get; set; } = "var(--acc)";
+    [Parameter] public string? Delta { get; set; }
+    [Parameter] public bool IsUp { get; set; }
+}

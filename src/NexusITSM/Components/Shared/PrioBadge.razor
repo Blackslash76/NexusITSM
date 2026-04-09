@@ -1,0 +1,34 @@
+@using NexusITSM.Models.Enums
+
+<span class="prio @CssClass">@IconChar @Label</span>
+
+@code {
+    [Parameter] public TicketPriority Priority { get; set; }
+
+    private string Label => Priority switch
+    {
+        TicketPriority.Critical => "Critical",
+        TicketPriority.High => "High",
+        TicketPriority.Medium => "Medium",
+        TicketPriority.Low => "Low",
+        _ => Priority.ToString()
+    };
+
+    private string CssClass => Priority switch
+    {
+        TicketPriority.Critical => "prio-1",
+        TicketPriority.High => "prio-2",
+        TicketPriority.Medium => "prio-3",
+        TicketPriority.Low => "prio-4",
+        _ => "prio-4"
+    };
+
+    private string IconChar => Priority switch
+    {
+        TicketPriority.Critical => "🔴",
+        TicketPriority.High => "🟠",
+        TicketPriority.Medium => "🟡",
+        TicketPriority.Low => "🔵",
+        _ => ""
+    };
+}

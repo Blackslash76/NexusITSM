@@ -1,0 +1,255 @@
+@page "/settings"
+@inject NexusITSM.Services.DemoDataService Data
+
+@using NexusITSM.Models.Entities
+@using NexusITSM.Models.Enums
+@using NexusITSM.Components.Shared
+
+<PageTitle>Settings — NexusITSM</PageTitle>
+
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+    <div>
+        <div style="font-size:20px;font-weight:700;color:var(--t1)">Impostazioni</div>
+        <div style="font-size:12px;color:var(--t4);margin-top:3px">Configura NexusITSM per il tuo ambiente</div>
+    </div>
+</div>
+
+@if (SaveToast)
+{
+    <div style="position:fixed;bottom:24px;right:24px;background:var(--acc3);color:#000;padding:10px 18px;border-radius:var(--r);font-size:12px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+        ✓ Impostazioni salvate
+    </div>
+}
+
+<!-- Tabs -->
+<div class="tabs" style="margin-bottom:16px">
+    <button class="tab @(ActiveTab == "generale" ? "active" : "")" @onclick='() => SetTab("generale")'>⚙ Generale</button>
+    <button class="tab @(ActiveTab == "notifiche" ? "active" : "")" @onclick='() => SetTab("notifiche")'>🔔 Notifiche</button>
+    <button class="tab @(ActiveTab == "sla" ? "active" : "")" @onclick='() => SetTab("sla")'>⏱ SLA</button>
+    <button class="tab @(ActiveTab == "gruppi" ? "active" : "")" @onclick='() => SetTab("gruppi")'>👥 Gruppi</button>
+</div>
+
+<!-- === TAB: GENERALE === -->
+@if (ActiveTab == "generale")
+{
+    <div class="card" style="max-width:680px">
+        <div class="card-title">Impostazioni Generali</div>
+        <div class="fgrid c2" style="margin-top:16px">
+            <div class="fg" style="grid-column:1/-1">
+                <label class="fl">Nome Applicazione</label>
+                <input class="fi" @bind="AppName" placeholder="Es: NexusITSM" />
+            </div>
+            <div class="fg">
+                <label class="fl">Timezone</label>
+                <select class="fi" @onchange="OnTimezoneChange">
+                    <option value="Europe/Rome" selected="@(Timezone == "Europe/Rome")">Europe/Rome (CET/CEST)</option>
+                    <option value="UTC" selected="@(Timezone == "UTC")">UTC</option>
+                    <option value="Europe/London" selected="@(Timezone == "Europe/London")">Europe/London (GMT/BST)</option>
+                    <option value="Europe/Berlin" selected="@(Timezone == "Europe/Berlin")">Europe/Berlin (CET/CEST)</option>
+                    <option value="America/New_York" selected="@(Timezone == "America/New_York")">America/New_York (EST/EDT)</option>
+                </select>
+            </div>
+            <div class="fg">
+                <label class="fl">Lingua interfaccia</label>
+                <select class="fi" @onchange="OnLanguageChange">
+                    <option value="it" selected="@(Language == "it")">Italiano</option>
+                    <option value="en" selected="@(Language == "en")">English</option>
+                    <option value="fr" selected="@(Language == "fr")">Français</option>
+                    <option value="de" selected="@(Language == "de")">Deutsch</option>
+                </select>
+            </div>
+            <div class="fg" style="grid-column:1/-1">
+                <label class="fl">Logo Aziendale</label>
+                <div style="border:2px dashed var(--bdr);border-radius:var(--r);padding:28px;text-align:center;background:var(--bg2);cursor:pointer">
+                    <div style="font-size:28px;margin-bottom:8px">🖼</div>
+                    <div style="font-size:12px;font-weight:600;color:var(--t2)">Trascina qui il file o clicca per caricare</div>
+                    <div style="font-size:11px;color:var(--t4);margin-top:4px">PNG, SVG — max 2MB</div>
+                    <input type="file" accept="image/*" style="display:none" />
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--bdr)">
+            <button class="btn pri" @onclick="SaveSettings">Salva Impostazioni</button>
+        </div>
+    </div>
+}
+
+<!-- === TAB: NOTIFICHE === -->
+@if (ActiveTab == "notifiche")
+{
+    <div class="card" style="max-width:580px">
+        <div class="card-title">Impostazioni Notifiche Email</div>
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:0">
+            @foreach (var notif in NotifOptions)
+            {
+                <label style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--bdr);cursor:pointer">
+                    <input type="checkbox" checked="@notif.Enabled" @onchange="(e) => OnNotifChange(notif, e)"
+                           style="width:16px;height:16px;accent-color:var(--acc)" />
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--t1)">@notif.Label</div>
+                        <div style="font-size:11px;color:var(--t4);margin-top:2px">@notif.Description</div>
+                    </div>
+                </label>
+            }
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+            <button class="btn pri" @onclick="SaveSettings">Salva Notifiche</button>
+        </div>
+    </div>
+}
+
+<!-- === TAB: SLA === -->
+@if (ActiveTab == "sla")
+{
+    <div class="card">
+        <div class="card-title">Politiche SLA</div>
+        <div class="tbl-wrap" style="margin-top:14px">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>Priorità</th>
+                        <th>Tempo Risposta</th>
+                        <th>Tempo Risoluzione</th>
+                        <th>Escalation Auto</th>
+                        <th>Notifica Breach</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var sla in SlaPolicies)
+                    {
+                        <tr>
+                            <td>
+                                <span class="prio @sla.PrioClass">@sla.PrioIcon @sla.Priorita</span>
+                            </td>
+                            <td style="font-family:var(--mono);font-size:12px;color:var(--t2)">@sla.TRisposta</td>
+                            <td style="font-family:var(--mono);font-size:12px;color:var(--t2)">@sla.TRisoluzione</td>
+                            <td>
+                                <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:@(sla.EscAuto ? "rgba(48,196,141,.15)" : "var(--bg3)");color:@(sla.EscAuto ? "var(--acc3)" : "var(--t4)")">
+                                    @(sla.EscAuto ? "✓ Attivo" : "— Off")
+                                </span>
+                            </td>
+                            <td>
+                                <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(75,158,255,.12);color:var(--acc)">
+                                    @sla.NotifBreach
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+            <button class="btn pri" @onclick="SaveSettings">Salva Politiche SLA</button>
+        </div>
+    </div>
+}
+
+<!-- === TAB: GRUPPI === -->
+@if (ActiveTab == "gruppi")
+{
+    <div class="card">
+        <div class="card-title">Gruppi di Supporto</div>
+        <div class="tbl-wrap" style="margin-top:14px">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Livello</th>
+                        <th>Icona / Colore</th>
+                        <th style="text-align:right">Membri</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var g in Data.Groups)
+                    {
+                        <tr>
+                            <td>
+                                <div style="font-size:12px;font-weight:600;color:var(--t1)">@g.Name</div>
+                                @if (!string.IsNullOrEmpty(g.Description))
+                                {
+                                    <div style="font-size:10px;color:var(--t4)">@g.Description</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="tag" style="background:rgba(75,158,255,.12);color:var(--acc)">@g.Level</span>
+                            </td>
+                            <td>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <div style="width:14px;height:14px;border-radius:50%;background:@g.Color;flex-shrink:0"></div>
+                                    <span style="font-size:16px">@g.Icon</span>
+                                    <span style="font-size:11px;font-family:var(--mono);color:var(--t4)">@g.Color</span>
+                                </div>
+                            </td>
+                            <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t2)">
+                                @(Data.Agents.Count(a => a.GroupId == g.Id || (g.Name.Contains("L1") && a.Role?.Contains("L1") == true) || (g.Name.Contains("L2") && a.Role?.Contains("L2") == true)))
+                            </td>
+                            <td style="font-size:11px;color:var(--t4)">
+                                @(string.IsNullOrEmpty(g.Email) ? $"{g.Name.ToLower().Replace(" ", "").Replace("—", "").Trim()}@nexusitsm.local" : g.Email)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+            <button class="btn pri" @onclick="SaveSettings">Salva Gruppi</button>
+        </div>
+    </div>
+}
+
+@code {
+    private string ActiveTab = "generale";
+    private bool SaveToast;
+
+    // Generale
+    private string AppName = "NexusITSM";
+    private string Timezone = "Europe/Rome";
+    private string Language = "it";
+
+    // Notifiche
+    private class NotifOption
+    {
+        public string Label { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool Enabled { get; set; }
+    }
+
+    private List<NotifOption> NotifOptions =
+    [
+        new() { Label = "Nuovo ticket",       Description = "Notifica quando viene creato un nuovo ticket",              Enabled = true },
+        new() { Label = "Escalation",         Description = "Notifica quando un ticket viene escalato",                  Enabled = true },
+        new() { Label = "SLA Warning",        Description = "Avviso quando lo SLA è al 75% del tempo disponibile",      Enabled = true },
+        new() { Label = "SLA Breach",         Description = "Notifica immediata quando uno SLA viene violato",           Enabled = true },
+        new() { Label = "Risoluzione ticket", Description = "Notifica al richiedente quando il ticket viene risolto",    Enabled = false },
+    ];
+
+    // SLA policies (hardcoded)
+    private record SlaPolicy(string Priorita, string PrioClass, string PrioIcon,
+        string TRisposta, string TRisoluzione, bool EscAuto, string NotifBreach);
+
+    private static readonly SlaPolicy[] SlaPolicies =
+    [
+        new("Critical", "prio-1", "🔴", "15 min",  "2 ore",  true,  "Immediata"),
+        new("High",     "prio-2", "🟠", "30 min",  "4 ore",  true,  "30 min prima"),
+        new("Medium",   "prio-3", "🟡", "2 ore",   "8 ore",  false, "1 ora prima"),
+        new("Low",      "prio-4", "🔵", "4 ore",   "24 ore", false, "2 ore prima"),
+    ];
+
+    private void SetTab(string tab) => ActiveTab = tab;
+
+    private void OnTimezoneChange(ChangeEventArgs e) => Timezone = e.Value?.ToString() ?? "Europe/Rome";
+    private void OnLanguageChange(ChangeEventArgs e) => Language = e.Value?.ToString() ?? "it";
+    private void OnNotifChange(NotifOption notif, ChangeEventArgs e) =>
+        notif.Enabled = (bool)(e.Value ?? false);
+
+    private async void SaveSettings()
+    {
+        SaveToast = true;
+        StateHasChanged();
+        await Task.Delay(2500);
+        SaveToast = false;
+        StateHasChanged();
+    }
+}

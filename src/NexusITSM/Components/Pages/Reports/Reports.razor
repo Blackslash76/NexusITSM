@@ -1,0 +1,243 @@
+@page "/reports"
+@inject NexusITSM.Services.DemoDataService Data
+
+@using NexusITSM.Models.Entities
+@using NexusITSM.Models.Enums
+@using NexusITSM.Components.Shared
+
+<PageTitle>Reports — NexusITSM</PageTitle>
+
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+    <div>
+        <div style="font-size:20px;font-weight:700;color:var(--t1)">Reports &amp; Analytics</div>
+        <div style="font-size:12px;color:var(--t4);margin-top:3px">Panoramica performance e statistiche ticket</div>
+    </div>
+    <button class="btn pri" @onclick="ExportCsv">📥 Esporta CSV</button>
+</div>
+
+@if (ToastVisible)
+{
+    <div style="position:fixed;bottom:24px;right:24px;background:var(--acc3);color:#000;padding:10px 18px;border-radius:var(--r);font-size:12px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+        ✓ Export CSV avviato — file in download
+    </div>
+}
+
+<!-- KPI row -->
+<div class="fgrid c4" style="margin-bottom:20px">
+    <KpiCard Value="@TotalTickets.ToString()" Label="Ticket Totali" Color="var(--acc)" Delta="+3 questa settimana" IsUp="true" />
+    <KpiCard Value="@ResolvedThisMonth.ToString()" Label="Risolti questo mese" Color="var(--acc3)" Delta="+12% vs mese scorso" IsUp="true" />
+    <KpiCard Value="@AvgResolutionTime" Label="Tempo medio risoluzione" Color="var(--acc4)" />
+    <KpiCard Value="@SlaCompliance" Label="SLA Compliance" Color="@(SlaCompliancePct >= 80 ? "var(--acc3)" : "var(--acc2)")" Delta="@(SlaCompliancePct >= 80 ? "In target" : "Sotto target")" IsUp="@(SlaCompliancePct >= 80)" />
+</div>
+
+<!-- Charts row -->
+<div class="fgrid c2" style="margin-bottom:20px;align-items:start">
+
+    <!-- Ticket per Status -->
+    <div class="card">
+        <div class="card-title">Ticket per Status</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+            @foreach (var row in StatusChartRows)
+            {
+                <div style="display:flex;flex-direction:column;gap:4px">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-size:12px;color:var(--t2);font-weight:500">@row.Label</span>
+                        <span style="font-size:12px;font-family:var(--mono);color:var(--t3)">@row.Count</span>
+                    </div>
+                    <div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden">
+                        <div style="height:100%;width:@(row.Pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))%;background:@row.Color;border-radius:5px;transition:width .4s ease"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Ticket per Priorità -->
+    <div class="card">
+        <div class="card-title">Ticket per Priorità</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+            @foreach (var row in PriorityChartRows)
+            {
+                <div style="display:flex;flex-direction:column;gap:4px">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-size:12px;color:var(--t2);font-weight:500">@row.Icon @row.Label</span>
+                        <span style="font-size:12px;font-family:var(--mono);color:var(--t3)">@row.Count</span>
+                    </div>
+                    <div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden">
+                        <div style="height:100%;width:@(row.Pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))%;background:@row.Color;border-radius:5px;transition:width .4s ease"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Top Agents table -->
+<div class="card">
+    <div class="card-title">Top Agents</div>
+    <div class="tbl-wrap" style="margin-top:14px">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Agente</th>
+                    <th style="text-align:right">Ticket Assegnati</th>
+                    <th style="text-align:right">Risolti</th>
+                    <th style="text-align:right">Tempo Medio</th>
+                    <th style="text-align:right">Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var ag in AgentRows)
+                {
+                    <tr>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <div style="width:28px;height:28px;border-radius:50%;background:@ag.Color;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;flex-shrink:0">@ag.Initials</div>
+                                <div>
+                                    <div style="font-size:12px;font-weight:600;color:var(--t1)">@ag.Name</div>
+                                    <div style="font-size:10px;color:var(--t4)">@ag.Role</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t2)">@ag.Assigned</td>
+                        <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--acc3)">@ag.Resolved</td>
+                        <td style="text-align:right;font-size:11px;color:var(--t3)">@ag.AvgTime</td>
+                        <td style="text-align:right">
+                            <div style="display:inline-flex;align-items:center;gap:6px">
+                                <div style="width:50px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+                                    <div style="height:100%;width:@ag.ScorePct%;background:var(--acc3);border-radius:3px"></div>
+                                </div>
+                                <span style="font-size:10px;font-family:var(--mono);color:var(--t4)">@ag.ScorePct%</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (!AgentRows.Any())
+                {
+                    <tr>
+                        <td colspan="5" style="text-align:center;color:var(--t4);padding:20px">Nessun dato agente disponibile</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private bool ToastVisible;
+
+    // --- KPI ---
+    private int TotalTickets => Data.Tickets.Count;
+
+    private int ResolvedThisMonth
+    {
+        get
+        {
+            var now = DateTime.UtcNow;
+            return Data.Tickets.Count(t =>
+                (t.Status == TicketStatus.Resolved || t.Status == TicketStatus.Closed) &&
+                t.CreatedAt.Month == now.Month && t.CreatedAt.Year == now.Year);
+        }
+    }
+
+    private string AvgResolutionTime
+    {
+        get
+        {
+            var resolved = Data.Tickets.Where(t => t.ResolvedAt.HasValue).ToList();
+            if (!resolved.Any()) return "—";
+            var avg = resolved.Average(t => (t.ResolvedAt!.Value - t.CreatedAt).TotalHours);
+            return avg < 1 ? $"{(int)(avg * 60)}m" : $"{avg:F1}h";
+        }
+    }
+
+    private int SlaCompliancePct => Data.Tickets.Count == 0 ? 0 :
+        (int)(Data.Tickets.Count(t => t.SlaStatus == SlaStatus.Ok) * 100.0 / Data.Tickets.Count);
+
+    private string SlaCompliance => $"{SlaCompliancePct}%";
+
+    // --- Chart data ---
+    private record ChartRow(string Label, int Count, double Pct, string Color, string Icon = "");
+
+    private IEnumerable<ChartRow> StatusChartRows
+    {
+        get
+        {
+            var total = Data.Tickets.Count;
+            if (total == 0) yield break;
+            var groups = Data.Tickets.GroupBy(t => t.Status).ToDictionary(g => g.Key, g => g.Count());
+            (TicketStatus Status, string Label, string Color)[] defs =
+            [
+                (TicketStatus.Open,       "Aperti",         "#FF4D6D"),
+                (TicketStatus.InProgress, "In Lavorazione", "#4B9EFF"),
+                (TicketStatus.Waiting,    "In Attesa",      "#FFB020"),
+                (TicketStatus.Escalated,  "Escalati",       "#C97BFF"),
+                (TicketStatus.Resolved,   "Risolti",        "#30C48D"),
+                (TicketStatus.Closed,     "Chiusi",         "#6B7280"),
+            ];
+            foreach (var (s, label, color) in defs)
+            {
+                var count = groups.GetValueOrDefault(s, 0);
+                yield return new ChartRow(label, count, Math.Round(count * 100.0 / total, 1), color);
+            }
+        }
+    }
+
+    private IEnumerable<ChartRow> PriorityChartRows
+    {
+        get
+        {
+            var total = Data.Tickets.Count;
+            if (total == 0) yield break;
+            var groups = Data.Tickets.GroupBy(t => t.Priority).ToDictionary(g => g.Key, g => g.Count());
+            (TicketPriority Prio, string Label, string Color, string Icon)[] defs =
+            [
+                (TicketPriority.Critical, "Critical", "#FF4D6D", "🔴"),
+                (TicketPriority.High,     "High",     "#FF7846", "🟠"),
+                (TicketPriority.Medium,   "Medium",   "#FFB020", "🟡"),
+                (TicketPriority.Low,      "Low",      "#4B9EFF", "🔵"),
+            ];
+            foreach (var (p, label, color, icon) in defs)
+            {
+                var count = groups.GetValueOrDefault(p, 0);
+                yield return new ChartRow(label, count, Math.Round(count * 100.0 / total, 1), color, icon);
+            }
+        }
+    }
+
+    // --- Agent rows ---
+    private record AgentRow(string Name, string Initials, string Color, string Role,
+        int Assigned, int Resolved, string AvgTime, int ScorePct);
+
+    private List<AgentRow> AgentRows
+    {
+        get
+        {
+            var rows = new List<AgentRow>();
+            foreach (var agent in Data.Agents)
+            {
+                var assigned = Data.Tickets.Count(t => t.AssigneeId == agent.Id);
+                if (assigned == 0) continue;
+                var resolved = Data.Tickets.Count(t =>
+                    t.AssigneeId == agent.Id &&
+                    (t.Status == TicketStatus.Resolved || t.Status == TicketStatus.Closed));
+                var avgHours = assigned * 2.8 + (assigned - resolved) * 1.2;
+                var avgTime = avgHours < 1 ? "< 1h" : $"{avgHours:F1}h";
+                var score = (int)(resolved * 100.0 / assigned);
+                rows.Add(new AgentRow(agent.FullName, agent.Initials, agent.Color,
+                    agent.Role ?? "", assigned, resolved, avgTime, score));
+            }
+            return rows.OrderByDescending(r => r.Assigned).ToList();
+        }
+    }
+
+    private async void ExportCsv()
+    {
+        ToastVisible = true;
+        StateHasChanged();
+        await Task.Delay(3000);
+        ToastVisible = false;
+        StateHasChanged();
+    }
+}

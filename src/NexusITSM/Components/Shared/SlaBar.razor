@@ -1,0 +1,28 @@
+@using NexusITSM.Models.Enums
+
+<div style="display:flex;align-items:center;gap:5px">
+    <div class="sla-bar @CssClass">
+        <div class="sla-fill" style="width:@(Math.Min(100, Percent))%"></div>
+    </div>
+    <span style="font-size:10px;font-family:var(--mono);color:@TextColor">@Percent%</span>
+</div>
+
+@code {
+    [Parameter] public int Percent { get; set; }
+    [Parameter] public SlaStatus Status { get; set; }
+
+    private string CssClass => Status switch
+    {
+        SlaStatus.Ok => "sla-ok",
+        SlaStatus.Warning => "sla-warn",
+        SlaStatus.Breach => "sla-breach",
+        _ => "sla-ok"
+    };
+
+    private string TextColor => Status switch
+    {
+        SlaStatus.Breach => "var(--acc2)",
+        SlaStatus.Warning => "var(--acc4)",
+        _ => "var(--acc3)"
+    };
+}

@@ -1,0 +1,15 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <Sidebar />
+    <div class="main">
+        <Topbar />
+        <div class="content">
+            <div class="pg act">
+                @Body
+            </div>
+        </div>
+    </div>
+</div>
+
+<ToastContainer />

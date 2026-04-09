@@ -1,0 +1,309 @@
+@page "/incidents"
+@inject NexusITSM.Services.DemoDataService Data
+@inject NavigationManager Nav
+
+<PageTitle>Incidents — NexusITSM</PageTitle>
+
+<!-- Toolbar -->
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--r);padding:3px">
+        <button class="btn sm @(View == "list" ? "pri" : "")" @onclick='() => View = "list"'>≡ Lista</button>
+        <button class="btn sm @(View == "kanban" ? "pri" : "")" @onclick='() => View = "kanban"'>⊞ Kanban</button>
+    </div>
+    <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto" @onchange="OnFilterStatus">
+        <option value="">Tutti gli status</option>
+        @foreach (var s in Enum.GetValues<TicketStatus>())
+        {
+            <option value="@s" selected="@(FilterStatus == s.ToString())">@FormatStatus(s)</option>
+        }
+    </select>
+    <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto" @onchange="OnFilterPriority">
+        <option value="">Tutte le priorità</option>
+        @foreach (var p in Enum.GetValues<TicketPriority>())
+        {
+            <option value="@p">@p</option>
+        }
+    </select>
+    <input class="fi" type="text" placeholder="Cerca ticket…" style="padding:5px 10px;font-size:11px;width:200px"
+           @bind="SearchQuery" @bind:event="oninput" />
+    <div style="margin-left:auto;display:flex;gap:7px">
+        <button class="btn" @onclick="BulkAction">☑ Bulk Action</button>
+        <button class="btn pri" @onclick="() => ShowNewTicket = true">+ Nuovo Incident</button>
+    </div>
+</div>
+
+@if (View == "kanban")
+{
+    <!-- KANBAN VIEW -->
+    <div class="kanban">
+        @foreach (var col in KanbanColumns)
+        {
+            var colTickets = Filtered.Where(t => t.Status == col.Status).ToList();
+            <div class="kb-col">
+                <div class="kb-col-head" style="background:@col.Bg;color:@col.Color">
+                    <span>@col.Label</span>
+                    <span style="font-family:var(--mono);font-size:10px">@colTickets.Count</span>
+                </div>
+                <div class="kb-cards">
+                    @foreach (var t in colTickets)
+                    {
+                        <div class="kb-card" style="border-left-color:@col.Color" @onclick="() => SelectTicket(t)">
+                            <div class="kb-card-id">@t.Id</div>
+                            <div class="kb-card-title">@t.Title</div>
+                            <div class="kb-card-meta">
+                                <PrioBadge Priority="@t.Priority" />
+                                <div style="display:flex;align-items:center;gap:4px">
+                                    <div class="kb-avatar" style="background:@(t.Assignee?.Color ?? "#4B9EFF");color:#000">@(t.Assignee?.Initials ?? "?")</div>
+                                    <SlaBar Percent="@t.SlaPercent" Status="@t.SlaStatus" />
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    @if (!colTickets.Any())
+                    {
+                        <div style="text-align:center;padding:20px;color:var(--t4);font-size:11px">— vuoto —</div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <!-- LIST VIEW -->
+    <div style="display:grid;grid-template-columns:1fr 360px;gap:12px">
+        <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden">
+            <div class="tbl-wrap" style="height:calc(100vh - 180px);overflow-y:auto">
+                <table class="tbl">
+                    <thead style="position:sticky;top:0;z-index:1">
+                        <tr>
+                            <th style="width:32px"><input type="checkbox" @onchange="ToggleSelectAll" /></th>
+                            <th>ID</th><th>Titolo</th><th>Priorità</th><th>Status</th>
+                            <th>Gruppo</th><th>Assegnato</th><th>Creato</th><th>SLA</th><th>Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in Filtered)
+                        {
+                            <tr @onclick="() => SelectTicket(t)" class="@(SelectedTicket?.Id == t.Id ? "sel" : "")" style="@(SelectedTicket?.Id == t.Id ? "background:rgba(75,158,255,.06)" : "")">
+                                <td @onclick:stopPropagation="true"><input type="checkbox" @bind="t.IsSelected" /></td>
+                                <td>@t.Id</td>
+                                <td style="max-width:220px">
+                                    <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@t.Title">@t.Title</div>
+                                    <div style="font-size:10px;color:var(--t4)">@t.Category · @t.Department</div>
+                                </td>
+                                <td><PrioBadge Priority="@t.Priority" /></td>
+                                <td><StatusBadge Status="@t.Status" /></td>
+                                <td><GroupBadge Group="@t.Group" /></td>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:5px">
+                                        <div style="width:22px;height:22px;border-radius:50%;background:@(t.Assignee?.Color ?? "#4B9EFF");display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000">@(t.Assignee?.Initials ?? "?")</div>
+                                        <span style="font-size:11px;color:var(--t2)">@(t.Assignee?.FullName.Split(' ').FirstOrDefault() ?? "—")</span>
+                                    </div>
+                                </td>
+                                <td style="font-size:11px;color:var(--t4);font-family:var(--mono);white-space:nowrap">@FormatRelative(t.CreatedAt)</td>
+                                <td><SlaBar Percent="@t.SlaPercent" Status="@t.SlaStatus" /></td>
+                                <td @onclick:stopPropagation="true">
+                                    <div style="display:flex;gap:4px">
+                                        <button class="btn sm ico" @onclick="() => EscalateTicket(t)" title="Escalate" style="@(t.IsEscalated ? "color:var(--acc5)" : "")">▲</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Detail panel -->
+        <div id="ticket-detail-panel">
+            @if (SelectedTicket != null)
+            {
+                <TicketDetail Ticket="SelectedTicket" Agents="Data.Agents" Groups="Data.Groups"
+                    OnStatusChange="HandleStatusChange" OnEscalate="HandleEscalate" OnNoteAdded="HandleNoteAdded" />
+            }
+            else
+            {
+                <div class="empty" style="margin-top:60px">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" style="opacity:.3;margin-bottom:10px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <p>Seleziona un ticket per vedere i dettagli</p>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- New Ticket Modal -->
+<Modal IsOpen="ShowNewTicket" Title="Nuovo Incident" OnClose="CloseNewTicket">
+    <div class="fgrid c2">
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Titolo <span class="req">*</span></label>
+            <input class="fi" @bind="NewTitle" placeholder="Descrizione breve dell'incidente" />
+        </div>
+        <div class="fg">
+            <label class="fl">Priorità</label>
+            <select class="fi" @bind="NewPriority">
+                @foreach (var p in Enum.GetValues<TicketPriority>())
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">Categoria</label>
+            <select class="fi" @bind="NewCategory">
+                @foreach (var c in Enum.GetValues<TicketCategory>())
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">Richiedente</label>
+            <input class="fi" @bind="NewRequester" placeholder="Nome richiedente" />
+        </div>
+        <div class="fg">
+            <label class="fl">Reparto</label>
+            <input class="fi" @bind="NewDept" placeholder="Es: IT, HR, Finance" />
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Descrizione</label>
+            <textarea class="fi" @bind="NewDescription" style="min-height:70px" placeholder="Descrivere il problema in dettaglio…"></textarea>
+        </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+        <button class="btn" @onclick="CloseNewTicket">Annulla</button>
+        <button class="btn pri" @onclick="CreateTicket">Crea Incident</button>
+    </div>
+</Modal>
+
+@code {
+    private string View = "list";
+    private string FilterStatus = "";
+    private string FilterPriority = "";
+    private string SearchQuery = "";
+    private Ticket? SelectedTicket;
+
+    // New ticket form
+    private bool ShowNewTicket;
+    private string NewTitle = "";
+    private TicketPriority NewPriority = TicketPriority.Medium;
+    private TicketCategory NewCategory = TicketCategory.Software;
+    private string NewRequester = "";
+    private string NewDept = "";
+    private string NewDescription = "";
+
+    private IEnumerable<Ticket> Filtered => Data.Tickets.Where(t =>
+    {
+        if (!string.IsNullOrEmpty(FilterStatus) && t.Status.ToString() != FilterStatus) return false;
+        if (!string.IsNullOrEmpty(FilterPriority) && t.Priority.ToString() != FilterPriority) return false;
+        if (!string.IsNullOrEmpty(SearchQuery) &&
+            !t.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) &&
+            !t.Id.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    });
+
+    private static readonly KanbanCol[] KanbanColumns =
+    [
+        new(TicketStatus.Open, "Aperti", "var(--acc2)", "rgba(255,77,109,.1)"),
+        new(TicketStatus.InProgress, "In Lavorazione", "var(--acc)", "rgba(75,158,255,.1)"),
+        new(TicketStatus.Waiting, "In Attesa", "var(--acc4)", "rgba(255,176,32,.1)"),
+        new(TicketStatus.Escalated, "Escalati", "var(--acc5)", "rgba(201,123,255,.1)"),
+        new(TicketStatus.Resolved, "Risolti", "var(--acc3)", "rgba(48,196,141,.1)"),
+    ];
+
+    private void OnFilterStatus(ChangeEventArgs e) => FilterStatus = e.Value?.ToString() ?? "";
+    private void OnFilterPriority(ChangeEventArgs e) => FilterPriority = e.Value?.ToString() ?? "";
+    private void CloseNewTicket() => ShowNewTicket = false;
+
+    private void SelectTicket(Ticket t)
+    {
+        SelectedTicket = t;
+        if (View == "kanban") View = "list";
+    }
+
+    private void EscalateTicket(Ticket t) => HandleEscalate(t);
+
+    private void HandleStatusChange((Ticket ticket, TicketStatus newStatus) args)
+    {
+        args.ticket.Status = args.newStatus;
+        if (args.newStatus == TicketStatus.Resolved) args.ticket.ResolvedAt = DateTime.UtcNow;
+        if (args.newStatus == TicketStatus.Closed) args.ticket.ClosedAt = DateTime.UtcNow;
+        args.ticket.Timeline.Add(new TimelineEvent
+        {
+            Type = args.newStatus == TicketStatus.Resolved ? TimelineEventType.Resolved : TimelineEventType.StatusChanged,
+            Actor = "Admin Marco", Message = $"Status aggiornato: {FormatStatus(args.newStatus)}", CreatedAt = DateTime.UtcNow
+        });
+    }
+
+    private void HandleEscalate(Ticket t)
+    {
+        t.EscalationLevel = t.EscalationLevel < EscalationLevel.L3 ? t.EscalationLevel + 1 : t.EscalationLevel;
+        t.Status = TicketStatus.Escalated;
+        t.IsEscalated = true;
+        var levels = new[] { "", "L1 Support", "L2 Engineering", "Management" };
+        t.Timeline.Add(new TimelineEvent
+        {
+            Type = TimelineEventType.Escalated, Actor = "Admin Marco",
+            Message = $"Escalation manuale a {levels[(int)t.EscalationLevel]}", CreatedAt = DateTime.UtcNow
+        });
+    }
+
+    private void HandleNoteAdded((Ticket ticket, string note) args)
+    {
+        args.ticket.Timeline.Add(new TimelineEvent
+        {
+            Type = TimelineEventType.Note, Actor = "Admin Marco", Message = args.note, CreatedAt = DateTime.UtcNow
+        });
+    }
+
+    private void CreateTicket()
+    {
+        if (string.IsNullOrWhiteSpace(NewTitle)) return;
+        var agent = Data.Agents[1]; // Sara Bianchi (L1) default
+        var group = Data.Groups[0]; // L1 Help Desk default
+        var ticket = new Ticket
+        {
+            Id = Data.NextTicketId(), Title = NewTitle, Priority = NewPriority, Category = NewCategory,
+            Status = TicketStatus.Open, Requester = NewRequester, Department = NewDept,
+            Description = NewDescription, Assignee = agent, AssigneeId = agent.Id,
+            Group = group, GroupId = group.Id, CreatedAt = DateTime.UtcNow,
+            SlaBreachAt = DateTime.UtcNow.AddHours(NewPriority switch { TicketPriority.Critical => 2, TicketPriority.High => 4, TicketPriority.Medium => 8, _ => 24 }),
+            SlaPercent = 0, SlaStatus = SlaStatus.Ok, Tags = [],
+            Timeline = [ new() { Type = TimelineEventType.Created, Actor = NewRequester, Message = NewDescription, CreatedAt = DateTime.UtcNow } ]
+        };
+        Data.Tickets.Insert(0, ticket);
+        ShowNewTicket = false;
+        SelectedTicket = ticket;
+        NewTitle = ""; NewDescription = ""; NewRequester = ""; NewDept = "";
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        var val = (bool)(e.Value ?? false);
+        foreach (var t in Filtered) t.IsSelected = val;
+    }
+
+    private void BulkAction()
+    {
+        var selected = Data.Tickets.Where(t => t.IsSelected).ToList();
+        if (!selected.Any()) return;
+        foreach (var t in selected) { t.Status = TicketStatus.Resolved; t.IsSelected = false; }
+    }
+
+    private static string FormatRelative(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m fa";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h fa";
+        return $"{(int)diff.TotalDays}g fa";
+    }
+
+    private static string FormatStatus(TicketStatus s) => s switch
+    {
+        TicketStatus.InProgress => "In Progress",
+        _ => s.ToString()
+    };
+
+    private record KanbanCol(TicketStatus Status, string Label, string Color, string Bg);
+}

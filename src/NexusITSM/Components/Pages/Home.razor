@@ -1,0 +1,174 @@
+@page "/"
+@inject NexusITSM.Services.DemoDataService Data
+
+<PageTitle>Dashboard — NexusITSM</PageTitle>
+
+<!-- KPI Row -->
+<div class="kpi-grid">
+    <KpiCard Value="@OpenCount.ToString()" Label="Ticket Aperti" Color="var(--acc2)" Delta="@($"↑ {NewToday} oggi")" IsUp="false" />
+    <KpiCard Value="@InProgressCount.ToString()" Label="In Lavorazione" Color="var(--acc)" Delta="@($"{AvgResponseTime} avg response")" IsUp="true" />
+    <KpiCard Value="@SlaBreachCount.ToString()" Label="SLA Breach" Color="var(--acc2)" Delta="@($"↑ {SlaBreachDelta} vs ieri")" IsUp="false" />
+    <KpiCard Value="@($"{SlaCompliancePct}%")" Label="SLA Compliance" Color="var(--acc3)" Delta="@($"↑ {SlaComplianceDelta}%")" IsUp="true" />
+    <KpiCard Value="@ResolvedToday.ToString()" Label="Risolti Oggi" Color="var(--acc3)" Delta="@($"MTTR: {Mttr}")" IsUp="true" />
+    <KpiCard Value="@EscalatedCount.ToString()" Label="Escalati" Color="var(--acc5)" />
+</div>
+
+<!-- Recent tickets + Group workload -->
+<div style="display:grid;grid-template-columns:1fr 320px;gap:14px;margin-bottom:16px">
+    <div class="card" style="padding:0">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+            <div class="card-title" style="margin:0">Ticket Recenti — Aperti &amp; In Progress</div>
+            <button class="btn sm" @onclick='() => Nav.NavigateTo("incidents")'>Vedi tutti →</button>
+        </div>
+        <div class="tbl-wrap">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>ID</th><th>Titolo</th><th>Priorità</th><th>Assegnato</th><th>SLA</th><th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in RecentTickets)
+                    {
+                        <tr>
+                            <td>@t.Id</td>
+                            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t1);font-family:var(--sans)">@t.Title</td>
+                            <td><PrioBadge Priority="@t.Priority" /></td>
+                            <td>
+                                <div style="display:flex;align-items:center;gap:5px">
+                                    <div style="width:20px;height:20px;border-radius:50%;background:@(t.Assignee?.Color ?? "#4B9EFF");display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#000;flex-shrink:0">@(t.Assignee?.Initials ?? "?")</div>
+                                    <span style="font-size:11px;color:var(--t2)">@(t.Assignee?.FullName.Split(' ').FirstOrDefault() ?? "—")</span>
+                                </div>
+                            </td>
+                            <td><SlaBar Percent="@t.SlaPercent" Status="@t.SlaStatus" /></td>
+                            <td><StatusBadge Status="@t.Status" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Group workload -->
+    <div class="card">
+        <div class="card-title">Carico per Gruppo</div>
+        @foreach (var g in GroupWorkloads)
+        {
+            var pct = Math.Min(100, g.Count * 8);
+            <div style="margin-bottom:9px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+                    <span style="font-size:14px">@g.Icon</span>
+                    <span style="font-size:12px;font-weight:600;flex:1;color:@g.Color">@g.Name</span>
+                    <span style="font-size:10px;font-family:var(--mono);color:var(--t4)">@g.Level</span>
+                    <span style="font-size:11px;font-family:var(--mono);color:@(g.Count > 10 ? "var(--acc2)" : g.Count > 5 ? "var(--acc4)" : "var(--acc3)")">@g.Count</span>
+                </div>
+                <div style="height:4px;background:var(--bg4);border-radius:3px;overflow:hidden">
+                    <div style="height:100%;width:@(pct)%;background:@g.Color;border-radius:3px;opacity:.7"></div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Bottom row: category, problems, changes -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+    <div class="card">
+        <div class="card-title">Ticket per Categoria</div>
+        @foreach (var cat in CategoryCounts)
+        {
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                <span style="font-size:12px;flex:1;color:var(--t2)">@cat.Name</span>
+                <div style="height:5px;width:80px;background:var(--bg4);border-radius:3px;overflow:hidden">
+                    <div style="height:100%;width:@(Math.Min(100, cat.Count * 15))%;background:var(--acc);border-radius:3px"></div>
+                </div>
+                <span style="font-size:11px;font-family:var(--mono);color:var(--t3);width:20px;text-align:right">@cat.Count</span>
+            </div>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-title">Problemi Aperti</div>
+        @if (!OpenProblems.Any())
+        {
+            <div class="empty">Nessun problema aperto</div>
+        }
+        @foreach (var p in OpenProblems)
+        {
+            <div style="padding:8px 10px;background:var(--bg3);border-radius:var(--r);margin-bottom:6px;cursor:pointer;border-left:2px solid @(p.Priority == TicketPriority.Critical ? "var(--acc2)" : "var(--acc4)")">
+                <div style="font-size:11px;font-family:var(--mono);color:var(--acc)">@p.Id</div>
+                <div style="font-size:12px;font-weight:600;color:var(--t1);margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@p.Title</div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <span style="font-size:10px;color:var(--t4)">@p.Incidents.Count incident correlati</span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-title">Change Imminenti</div>
+        @if (!UpcomingChanges.Any())
+        {
+            <div class="empty">Nessun change pianificato</div>
+        }
+        @foreach (var c in UpcomingChanges)
+        {
+            <div style="padding:8px 10px;background:var(--bg3);border-radius:var(--r);margin-bottom:6px;cursor:pointer;border-left:2px solid @(c.Type == ChangeType.Emergency ? "var(--acc2)" : c.Type == ChangeType.Major ? "var(--acc5)" : "var(--acc4)")">
+                <div style="font-size:11px;font-family:var(--mono);color:var(--acc)">@c.Id</div>
+                <div style="font-size:12px;font-weight:600;color:var(--t1);margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@c.Title</div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <span style="font-size:10px;color:var(--t4)">@(c.CabDate.HasValue ? c.CabDate.Value.ToString("dd/MM HH:mm") : "Da pianificare")</span>
+                    <span class="tag" style="font-size:9px">@c.Type</span>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private int OpenCount;
+    private int InProgressCount;
+    private int SlaBreachCount;
+    private int SlaCompliancePct;
+    private int ResolvedToday;
+    private int EscalatedCount;
+    private int NewToday = 4;
+    private string AvgResponseTime = "23m";
+    private int SlaBreachDelta = 1;
+    private int SlaComplianceDelta = 2;
+    private string Mttr = "2.4h";
+
+    private List<Ticket> RecentTickets = [];
+    private List<GroupWorkload> GroupWorkloads = [];
+    private List<CategoryCount> CategoryCounts = [];
+    private List<Problem> OpenProblems = [];
+    private List<Change> UpcomingChanges = [];
+
+    protected override void OnInitialized()
+    {
+        var active = Data.Tickets.Where(t => t.Status != TicketStatus.Closed).ToList();
+        OpenCount = active.Count(t => t.Status == TicketStatus.Open);
+        InProgressCount = active.Count(t => t.Status == TicketStatus.InProgress);
+        SlaBreachCount = active.Count(t => t.SlaStatus == SlaStatus.Breach);
+        EscalatedCount = active.Count(t => t.Status == TicketStatus.Escalated);
+        ResolvedToday = Data.Tickets.Count(t => t.Status == TicketStatus.Resolved);
+        SlaCompliancePct = active.Count > 0 ? 100 - (SlaBreachCount * 100 / active.Count) : 100;
+
+        RecentTickets = active.Take(7).ToList();
+        OpenProblems = Data.Problems;
+        UpcomingChanges = Data.Changes.OrderBy(c => c.CabDate).Take(4).ToList();
+
+        GroupWorkloads = Data.Groups.Select(g => new GroupWorkload(
+            g.Name, g.Icon, g.Color, g.Level.ToString(),
+            Data.Tickets.Count(t => t.GroupId == g.Id && t.Status != TicketStatus.Closed && t.Status != TicketStatus.Resolved)
+        )).ToList();
+
+        CategoryCounts = active.GroupBy(t => t.Category)
+            .Select(g => new CategoryCount(g.Key.ToString(), g.Count()))
+            .OrderByDescending(c => c.Count).Take(8).ToList();
+    }
+
+    private record GroupWorkload(string Name, string Icon, string Color, string Level, int Count);
+    private record CategoryCount(string Name, int Count);
+}

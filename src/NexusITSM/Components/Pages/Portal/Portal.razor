@@ -1,0 +1,315 @@
+@page "/portal"
+@inject NexusITSM.Services.DemoDataService Data
+
+@using NexusITSM.Models.Entities
+@using NexusITSM.Models.Enums
+@using NexusITSM.Components.Shared
+
+<PageTitle>Portale Assistenza — NexusITSM</PageTitle>
+
+<div class="portal-wrap">
+
+    <!-- Hero -->
+    <div class="portal-hero">
+        <div class="portal-hero-icon">🛟</div>
+        <div class="portal-hero-title">Portale Assistenza IT</div>
+        <div class="portal-hero-sub">Come possiamo aiutarti oggi?</div>
+    </div>
+
+    <!-- Stats bar -->
+    <div style="display:flex;gap:24px;justify-content:center;margin:20px 0;flex-wrap:wrap">
+        <div style="text-align:center;padding:14px 28px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl)">
+            <div style="font-size:24px;font-weight:700;color:var(--t1)">@MyTickets</div>
+            <div style="font-size:11px;color:var(--t4);margin-top:3px">I Miei Ticket</div>
+        </div>
+        <div style="text-align:center;padding:14px 28px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl)">
+            <div style="font-size:24px;font-weight:700;color:var(--acc4)">@WaitingTickets</div>
+            <div style="font-size:11px;color:var(--t4);margin-top:3px">In Attesa</div>
+        </div>
+        <div style="text-align:center;padding:14px 28px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl)">
+            <div style="font-size:24px;font-weight:700;color:var(--acc3)">@ResolvedTickets</div>
+            <div style="font-size:11px;color:var(--t4);margin-top:3px">Risolti</div>
+        </div>
+    </div>
+
+    <!-- Main layout: wizard + sidebar -->
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;margin-top:10px">
+
+        <!-- WIZARD -->
+        <div>
+            <!-- Step indicators -->
+            <div style="display:flex;align-items:center;gap:0;margin-bottom:20px">
+                @for (int i = 1; i <= 3; i++)
+                {
+                    var step = i;
+                    var isActive = WizardStep == step;
+                    var isDone = WizardStep > step;
+                    <div style="display:flex;align-items:center;flex:1">
+                        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                            <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid @(isDone ? "var(--acc3)" : isActive ? "var(--acc)" : "var(--bdr)");background:@(isDone ? "var(--acc3)" : isActive ? "var(--acc)" : "transparent");color:@(isDone || isActive ? "#000" : "var(--t4)")">
+                                @(isDone ? "✓" : step.ToString())
+                            </div>
+                            <span style="font-size:12px;font-weight:@(isActive ? "700" : "400");color:@(isActive ? "var(--t1)" : "var(--t4)")">@StepLabel(step)</span>
+                        </div>
+                        @if (step < 3)
+                        {
+                            <div style="flex:1;height:2px;background:@(WizardStep > step ? "var(--acc3)" : "var(--bdr)");margin:0 12px"></div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Step 1: Scegli Categoria -->
+            @if (WizardStep == 1)
+            {
+                <div class="card">
+                    <div class="card-title">Scegli Categoria</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-top:16px">
+                        @foreach (var cat in PortalCategories)
+                        {
+                            <div class="portal-cat @(SelectedCategory == cat.Name ? "selected" : "")"
+                                 @onclick="() => SelectCategory(cat.Name)"
+                                 style="cursor:pointer;padding:16px 12px;border-radius:var(--rl);border:2px solid @(SelectedCategory == cat.Name ? "var(--acc)" : "var(--bdr)");background:@(SelectedCategory == cat.Name ? "rgba(75,158,255,.08)" : "var(--bg2)");text-align:center;transition:border-color .2s,background .2s">
+                                <div class="portal-cat-icon" style="font-size:26px;margin-bottom:8px">@cat.Icon</div>
+                                <div class="portal-cat-name" style="font-size:12px;font-weight:600;color:var(--t1)">@cat.Name</div>
+                                <div style="font-size:10px;color:var(--t4);margin-top:3px">SLA @cat.Sla</div>
+                            </div>
+                        }
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;margin-top:18px;padding-top:12px;border-top:1px solid var(--bdr)">
+                        <button class="btn pri" disabled="@(string.IsNullOrEmpty(SelectedCategory))" @onclick="GoStep2">
+                            Continua →
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Step 2: Descrivi Problema -->
+            @if (WizardStep == 2)
+            {
+                <div class="card">
+                    <div class="card-title">Descrivi il Problema</div>
+                    <div class="fgrid c2" style="margin-top:16px">
+                        <div class="fg" style="grid-column:1/-1">
+                            <label class="fl">Titolo <span style="color:var(--acc2)">*</span></label>
+                            <input class="fi" @bind="FormTitle" placeholder="Breve descrizione del problema" />
+                        </div>
+                        <div class="fg" style="grid-column:1/-1">
+                            <label class="fl">Descrizione dettagliata</label>
+                            <textarea class="fi" @bind="FormDescription" style="min-height:90px" placeholder="Descrivi il problema in dettaglio: quando si verifica, messaggi di errore, passi per riprodurlo…"></textarea>
+                        </div>
+                        <div class="fg">
+                            <label class="fl">Priorità</label>
+                            <select class="fi" @onchange="OnPriorityChange">
+                                <option value="@TicketPriority.Low" selected="@(FormPriority == TicketPriority.Low)">🔵 Low — non urgente</option>
+                                <option value="@TicketPriority.Medium" selected="@(FormPriority == TicketPriority.Medium)">🟡 Medium — impatto moderato</option>
+                                <option value="@TicketPriority.High" selected="@(FormPriority == TicketPriority.High)">🟠 High — impatto significativo</option>
+                                <option value="@TicketPriority.Critical" selected="@(FormPriority == TicketPriority.Critical)">🔴 Critical — servizio bloccato</option>
+                            </select>
+                        </div>
+                        <div class="fg">
+                            <label class="fl">Allegato (facoltativo)</label>
+                            <div style="border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px;background:var(--bg2);font-size:12px;color:var(--t4);cursor:pointer">
+                                📎 Clicca per allegare file
+                                <input type="file" style="display:none" />
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-top:18px;padding-top:12px;border-top:1px solid var(--bdr)">
+                        <button class="btn" @onclick="GoStep1">← Indietro</button>
+                        <button class="btn pri" disabled="@(string.IsNullOrWhiteSpace(FormTitle))" @onclick="GoStep3">
+                            Anteprima →
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Step 3: Conferma -->
+            @if (WizardStep == 3)
+            {
+                <div class="card">
+                    <div class="card-title">Conferma e Invia</div>
+                    <div style="background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rl);padding:16px;margin-top:16px;display:flex;flex-direction:column;gap:12px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--bdr)">
+                            <span style="font-size:11px;color:var(--t4)">Categoria</span>
+                            <span style="font-size:12px;font-weight:600;color:var(--t1)">@SelectedCategory</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:1px solid var(--bdr)">
+                            <span style="font-size:11px;color:var(--t4)">Titolo</span>
+                            <span style="font-size:12px;font-weight:600;color:var(--t1);max-width:280px;text-align:right">@FormTitle</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(FormDescription))
+                        {
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:1px solid var(--bdr)">
+                                <span style="font-size:11px;color:var(--t4)">Descrizione</span>
+                                <span style="font-size:11px;color:var(--t2);max-width:280px;text-align:right">@FormDescription</span>
+                            </div>
+                        }
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span style="font-size:11px;color:var(--t4)">Priorità</span>
+                            <PrioBadge Priority="@FormPriority" />
+                        </div>
+                    </div>
+                    <div style="margin-top:14px;padding:12px;background:rgba(75,158,255,.06);border-radius:var(--r);border:1px solid rgba(75,158,255,.2);font-size:11px;color:var(--t3)">
+                        ℹ Il ticket verrà assegnato automaticamente al gruppo competente. Riceverai una notifica via email all'apertura e alla risoluzione.
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-top:18px;padding-top:12px;border-top:1px solid var(--bdr)">
+                        <button class="btn" @onclick="GoStep2">← Modifica</button>
+                        <button class="btn pri" @onclick="SubmitTicket">✓ Invia Richiesta</button>
+                    </div>
+                </div>
+            }
+
+            <!-- Success message -->
+            @if (Submitted)
+            {
+                <div style="text-align:center;padding:40px 20px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl)">
+                    <div style="font-size:48px;margin-bottom:12px">✅</div>
+                    <div style="font-size:18px;font-weight:700;color:var(--t1)">Richiesta inviata!</div>
+                    <div style="font-size:12px;color:var(--t4);margin-top:8px">Ticket ID: <span style="font-family:var(--mono);color:var(--acc)">@CreatedTicketId</span></div>
+                    <div style="font-size:12px;color:var(--t4);margin-top:4px">Il team IT ha ricevuto la tua richiesta e la gestirà al più presto.</div>
+                    <button class="btn pri" style="margin-top:16px" @onclick="ResetWizard">+ Nuova Richiesta</button>
+                </div>
+            }
+        </div>
+
+        <!-- SIDEBAR: I Miei Ticket -->
+        <div class="card">
+            <div class="card-title" style="margin-bottom:12px">I Miei Ticket</div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+                @foreach (var t in RecentTickets)
+                {
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 6px;border-radius:var(--r);border-bottom:1px solid var(--bdr)">
+                        <span style="font-family:var(--mono);font-size:10px;color:var(--t4);flex-shrink:0;min-width:60px">@t.Id</span>
+                        <span style="font-size:11px;color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@t.Title">@t.Title</span>
+                        <StatusBadge Status="@t.Status" />
+                    </div>
+                }
+                @if (!RecentTickets.Any())
+                {
+                    <div style="text-align:center;padding:20px;color:var(--t4);font-size:11px">Nessun ticket recente</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int WizardStep = 1;
+    private bool Submitted;
+    private string CreatedTicketId = "";
+
+    // Wizard fields
+    private string SelectedCategory = "";
+    private string FormTitle = "";
+    private string FormDescription = "";
+    private TicketPriority FormPriority = TicketPriority.Medium;
+
+    // Stats
+    private int MyTickets => Data.Tickets.Count;
+    private int WaitingTickets => Data.Tickets.Count(t => t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Open);
+    private int ResolvedTickets => Data.Tickets.Count(t => t.Status == TicketStatus.Resolved || t.Status == TicketStatus.Closed);
+
+    private IEnumerable<Ticket> RecentTickets => Data.Tickets.Take(5);
+
+    private record PortalCat(string Icon, string Name, string Sla);
+
+    private static readonly PortalCat[] PortalCategories =
+    [
+        new("💻", "Hardware",    "24h"),
+        new("📦", "Software",    "8h"),
+        new("🌐", "Network",     "4h"),
+        new("✉",  "Email",       "8h"),
+        new("🔑", "Accessi",     "4h"),
+        new("🔒", "Security",    "2h"),
+        new("🖨", "Stampanti",   "24h"),
+        new("📱", "Mobile",      "8h"),
+    ];
+
+    private static string StepLabel(int step) => step switch
+    {
+        1 => "Scegli Categoria",
+        2 => "Descrivi Problema",
+        3 => "Conferma",
+        _ => ""
+    };
+
+    private void SelectCategory(string cat) => SelectedCategory = cat;
+    private void GoStep1() => WizardStep = 1;
+    private void GoStep2() => WizardStep = 2;
+    private void GoStep3() => WizardStep = 3;
+
+    private void OnPriorityChange(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<TicketPriority>(e.Value?.ToString(), out var p))
+            FormPriority = p;
+    }
+
+    private void SubmitTicket()
+    {
+        if (string.IsNullOrWhiteSpace(FormTitle)) return;
+        var agent = Data.Agents[1];
+        var group = Data.Groups[0];
+        var slaH = FormPriority switch
+        {
+            TicketPriority.Critical => 2,
+            TicketPriority.High => 4,
+            TicketPriority.Medium => 8,
+            _ => 24
+        };
+        var catEnum = SelectedCategory switch
+        {
+            "Hardware" => TicketCategory.Hardware,
+            "Software" => TicketCategory.Software,
+            "Network" => TicketCategory.Network,
+            "Email" => TicketCategory.Email,
+            "Accessi" => TicketCategory.AccessManagement,
+            "Security" => TicketCategory.Security,
+            "Stampanti" => TicketCategory.Printer,
+            "Mobile" => TicketCategory.Mobile,
+            _ => TicketCategory.Hardware
+        };
+        var ticket = new Ticket
+        {
+            Id = Data.NextTicketId(),
+            Title = FormTitle,
+            Description = FormDescription,
+            Priority = FormPriority,
+            Category = catEnum,
+            Status = TicketStatus.Open,
+            Requester = "Utente Portale",
+            Department = "Self-Service",
+            Assignee = agent, AssigneeId = agent.Id,
+            Group = group, GroupId = group.Id,
+            CreatedAt = DateTime.UtcNow,
+            SlaBreachAt = DateTime.UtcNow.AddHours(slaH),
+            SlaPercent = 0, SlaStatus = SlaStatus.Ok,
+            Tags = [SelectedCategory.ToLower()],
+            Timeline =
+            [
+                new TimelineEvent
+                {
+                    Type = TimelineEventType.Created,
+                    Actor = "Utente Portale",
+                    Message = $"Richiesta aperta via Portale — {SelectedCategory}",
+                    CreatedAt = DateTime.UtcNow
+                }
+            ]
+        };
+        Data.Tickets.Insert(0, ticket);
+        CreatedTicketId = ticket.Id;
+        Submitted = true;
+        WizardStep = 0;
+    }
+
+    private void ResetWizard()
+    {
+        Submitted = false;
+        WizardStep = 1;
+        SelectedCategory = "";
+        FormTitle = "";
+        FormDescription = "";
+        FormPriority = TicketPriority.Medium;
+        CreatedTicketId = "";
+    }
+}

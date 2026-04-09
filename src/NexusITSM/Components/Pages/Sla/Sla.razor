@@ -1,0 +1,190 @@
+@page "/sla"
+@inject NexusITSM.Services.DemoDataService Data
+
+<PageTitle>SLA Engine — NexusITSM</PageTitle>
+
+<!-- KPI Row -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+    <KpiCard Value="@CompliancePercent" Label="Compliance SLA" Color="var(--acc3)" Delta="+2.1%" IsUp="true" />
+    <KpiCard Value="@ActiveSlaCount.ToString()" Label="SLA Attivi" Color="var(--acc)" />
+    <KpiCard Value="@BreachesToday.ToString()" Label="Breach Oggi" Color="var(--acc2)" Delta="-1" IsUp="false" />
+    <KpiCard Value="@AvgResponse" Label="Risposta Media" Color="var(--acc4)" />
+</div>
+
+<!-- SLA Policies -->
+<div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden;margin-bottom:18px">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-weight:700;font-size:13px;color:var(--t1)">Politiche SLA</span>
+        <button class="btn sm pri">+ Nuova Politica</button>
+    </div>
+    <div class="tbl-wrap">
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Priorità</th>
+                    <th>Tempo Risposta</th>
+                    <th>Tempo Risoluzione</th>
+                    <th style="text-align:center">Attiva</th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (int i = 0; i < Policies.Count; i++)
+                {
+                    var pol = Policies[i];
+                    var idx = i;
+                    <tr>
+                        <td style="font-weight:600;color:var(--t1)">@pol.Name</td>
+                        <td><PrioBadge Priority="@pol.Priority" /></td>
+                        <td style="font-family:var(--mono);font-size:11px">@pol.ResponseTime</td>
+                        <td style="font-family:var(--mono);font-size:11px">@pol.ResolutionTime</td>
+                        <td style="text-align:center">
+                            <input type="checkbox" checked="@pol.Active"
+                                   @onchange="@CreatePolicyToggleHandler(idx)" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Active SLA Tracker -->
+<div style="background:var(--sur);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px">
+        <span style="font-weight:700;font-size:13px;color:var(--t1)">Tracker SLA Attivi</span>
+        <span style="font-size:11px;color:var(--t4);font-family:var(--mono)">@ActiveTickets.Count ticket</span>
+    </div>
+    <div class="tbl-wrap" style="max-height:420px;overflow-y:auto">
+        <table class="tbl">
+            <thead style="position:sticky;top:0;z-index:1">
+                <tr>
+                    <th>ID</th>
+                    <th>Titolo</th>
+                    <th>Priorità</th>
+                    <th style="min-width:120px">SLA %</th>
+                    <th>Status SLA</th>
+                    <th>Scadenza</th>
+                    <th>Assegnato</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in ActiveTickets)
+                {
+                    <tr>
+                        <td style="font-family:var(--mono);font-size:11px;color:var(--acc)">@t.Id</td>
+                        <td style="max-width:240px">
+                            <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@t.Title">@t.Title</div>
+                            <div style="font-size:10px;color:var(--t4)">@t.Category</div>
+                        </td>
+                        <td><PrioBadge Priority="@t.Priority" /></td>
+                        <td><SlaBar Percent="@t.SlaPercent" Status="@t.SlaStatus" /></td>
+                        <td>
+                            <span class="@SlaStatusBadgeClass(t.SlaStatus)" style="font-size:10px;padding:2px 8px;border-radius:var(--r);font-weight:600">
+                                @SlaStatusLabel(t.SlaStatus)
+                            </span>
+                        </td>
+                        <td style="font-size:11px;font-family:var(--mono);color:var(--t4);white-space:nowrap">
+                            @FormatRemaining(t.SlaBreachAt)
+                        </td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:5px">
+                                <div style="width:22px;height:22px;border-radius:50%;background:@(t.Assignee?.Color ?? "#4B9EFF");display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000">
+                                    @(t.Assignee?.Initials ?? "?")
+                                </div>
+                                <span style="font-size:11px;color:var(--t2)">@(t.Assignee?.FullName.Split(' ').FirstOrDefault() ?? "—")</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (!ActiveTickets.Any())
+                {
+                    <tr>
+                        <td colspan="7" style="text-align:center;padding:28px;color:var(--t4);font-size:12px">Nessun ticket attivo</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private class SlaPolicy
+    {
+        public string Name           { get; set; } = "";
+        public TicketPriority Priority { get; set; }
+        public string ResponseTime   { get; set; } = "";
+        public string ResolutionTime { get; set; } = "";
+        public bool Active           { get; set; } = true;
+    }
+
+    private readonly List<SlaPolicy> Policies =
+    [
+        new() { Name = "Critical Emergency", Priority = TicketPriority.Critical, ResponseTime = "30 min", ResolutionTime = "2 h"  },
+        new() { Name = "High Priority",      Priority = TicketPriority.High,     ResponseTime = "1 h",    ResolutionTime = "4 h"  },
+        new() { Name = "Medium Standard",    Priority = TicketPriority.Medium,   ResponseTime = "2 h",    ResolutionTime = "8 h"  },
+        new() { Name = "Low Routine",        Priority = TicketPriority.Low,      ResponseTime = "4 h",    ResolutionTime = "24 h" },
+    ];
+
+    private List<Ticket> ActiveTickets => Data.Tickets
+        .Where(t => t.Status != TicketStatus.Closed && t.Status != TicketStatus.Resolved)
+        .OrderByDescending(t => t.SlaPercent)
+        .ToList();
+
+    private string CompliancePercent
+    {
+        get
+        {
+            var total = Data.Tickets.Count;
+            if (total == 0) return "—";
+            var ok = Data.Tickets.Count(t => t.SlaStatus != SlaStatus.Breach);
+            return $"{ok * 100 / total}%";
+        }
+    }
+
+    private int ActiveSlaCount => ActiveTickets.Count;
+
+    private int BreachesToday => Data.Tickets.Count(t =>
+        t.SlaStatus == SlaStatus.Breach &&
+        t.SlaBreachAt.Date == DateTime.UtcNow.Date);
+
+    private string AvgResponse
+    {
+        get
+        {
+            var resolved = Data.Tickets.Where(t => t.ResolvedAt.HasValue).ToList();
+            if (!resolved.Any()) return "—";
+            var avg = resolved.Average(t => (t.ResolvedAt!.Value - t.CreatedAt).TotalHours);
+            return avg < 1 ? $"{(int)(avg * 60)}m" : $"{avg:F1}h";
+        }
+    }
+
+    // Returns a named-equivalent EventCallback bound to a specific policy index.
+    private EventCallback<ChangeEventArgs> CreatePolicyToggleHandler(int index)
+        => EventCallback.Factory.Create<ChangeEventArgs>(this, e => OnPolicyToggle(index, e));
+
+    private void OnPolicyToggle(int index, ChangeEventArgs e)
+        => Policies[index].Active = (bool)(e.Value ?? false);
+
+    private static string SlaStatusLabel(SlaStatus s) => s switch
+    {
+        SlaStatus.Breach  => "Breach",
+        SlaStatus.Warning => "Warning",
+        _                 => "OK"
+    };
+
+    private static string SlaStatusBadgeClass(SlaStatus s) => s switch
+    {
+        SlaStatus.Breach  => "badge-breach",
+        SlaStatus.Warning => "badge-warn",
+        _                 => "badge-ok"
+    };
+
+    private static string FormatRemaining(DateTime breachAt)
+    {
+        var diff = breachAt - DateTime.UtcNow;
+        if (diff.TotalSeconds < 0) return "Scaduto";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m";
+        return $"{(int)diff.TotalHours}h {diff.Minutes}m";
+    }
+}

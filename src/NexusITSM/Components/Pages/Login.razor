@@ -1,0 +1,72 @@
+@page "/login"
+@layout EmptyLayout
+@inject NavigationManager Nav
+
+<PageTitle>Login — NexusITSM</PageTitle>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:var(--sans)">
+    <div style="width:380px">
+        <!-- Logo -->
+        <div style="text-align:center;margin-bottom:32px">
+            <div style="width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--acc3));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#fff;margin:0 auto 14px;font-family:var(--mono)">N</div>
+            <div style="font-size:20px;font-weight:700;color:var(--t1)">NexusITSM</div>
+            <div style="font-size:11px;color:var(--t4);margin-top:3px">ServiceDesk Enterprise v4</div>
+        </div>
+
+        <!-- Login Card -->
+        <div class="card" style="padding:24px">
+            <form method="post" action="/api/auth/login">
+                <input type="hidden" name="ReturnUrl" value="/" />
+                <AntiforgeryToken />
+
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <div style="padding:8px 12px;background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.25);border-radius:var(--r);margin-bottom:14px;font-size:11px;color:var(--acc2)">
+                        @ErrorMessage
+                    </div>
+                }
+
+                <div class="fg" style="margin-bottom:14px">
+                    <label class="fl">Email</label>
+                    <input class="fi" type="email" name="Email" value="admin@nexusitsm.local" required
+                           placeholder="nome@azienda.com" style="width:100%" />
+                </div>
+
+                <div class="fg" style="margin-bottom:14px">
+                    <label class="fl">Password</label>
+                    <input class="fi" type="password" name="Password" value="Nexus2025!" required
+                           placeholder="••••••••" style="width:100%" />
+                </div>
+
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">
+                    <input type="checkbox" name="RememberMe" id="remember" />
+                    <label for="remember" style="font-size:11px;color:var(--t3);cursor:pointer">Ricordami</label>
+                </div>
+
+                <button type="submit" class="btn pri" style="width:100%;padding:10px;font-size:13px;font-weight:600">
+                    Accedi
+                </button>
+            </form>
+
+            <div style="text-align:center;margin-top:16px">
+                <a href="/register" style="font-size:11px;color:var(--acc);text-decoration:none">Non hai un account? Registrati</a>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align:center;margin-top:20px;font-size:10px;color:var(--t4)">
+            © 2025 NexusITSM — Enterprise ServiceDesk
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    private string? ErrorMessage => Error switch
+    {
+        "invalid" => "Credenziali non valide. Riprova.",
+        "locked" => "Account bloccato. Contatta l'amministratore.",
+        _ => null
+    };
+}

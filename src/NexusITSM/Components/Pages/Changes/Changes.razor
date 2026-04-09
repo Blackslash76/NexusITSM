@@ -1,0 +1,637 @@
+@page "/changes"
+@inject NexusITSM.Services.DemoDataService Data
+
+<PageTitle>Changes — NexusITSM</PageTitle>
+
+<!-- ═══════════════════════════════════════════════
+     TOOLBAR
+════════════════════════════════════════════════ -->
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <input class="fi" type="text" placeholder="Cerca RFC…"
+           style="padding:5px 10px;font-size:11px;width:200px"
+           @bind="SearchQuery" @bind:event="oninput" />
+    <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto"
+            @onchange="OnFilterType">
+        <option value="">Tutti i tipi</option>
+        @foreach (var t in Enum.GetValues<ChangeType>())
+        {
+            <option value="@t">@t</option>
+        }
+    </select>
+    <select class="fi" style="padding:5px 28px 5px 9px;font-size:11px;width:auto"
+            @onchange="OnFilterStatus">
+        <option value="">Tutti gli status</option>
+        @foreach (var s in Enum.GetValues<ChangeStatus>())
+        {
+            <option value="@s">@s</option>
+        }
+    </select>
+    <div style="margin-left:auto">
+        <button class="btn pri" @onclick="() => ShowNewChange = true">+ RFC — Richiesta di Cambiamento</button>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SUMMARY TAGS
+════════════════════════════════════════════════ -->
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto">
+        <span style="font-size:11px;color:var(--t3)">Totale RFC</span>
+        <span style="font-size:18px;font-weight:700;color:var(--t1)">@Data.Changes.Count</span>
+    </div>
+    <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto;border-left:3px solid #FF4D6D">
+        <span style="font-size:11px;color:var(--t3)">Emergency</span>
+        <span style="font-size:18px;font-weight:700;color:#FF4D6D">@Data.Changes.Count(c => c.Type == ChangeType.Emergency)</span>
+    </div>
+    <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto;border-left:3px solid #C97BFF">
+        <span style="font-size:11px;color:var(--t3)">CAB Pending</span>
+        <span style="font-size:18px;font-weight:700;color:#C97BFF">@Data.Changes.Count(c => c.Status == ChangeStatus.PendingCAB)</span>
+    </div>
+    <div class="card" style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto;border-left:3px solid var(--acc3)">
+        <span style="font-size:11px;color:var(--t3)">Approvate</span>
+        <span style="font-size:18px;font-weight:700;color:var(--acc3)">@Data.Changes.Count(c => c.Status == ChangeStatus.Approved)</span>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     TWO-COLUMN: TABLE + RISK MATRIX
+════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 320px;gap:12px;margin-bottom:14px;align-items:start">
+
+    <!-- Change Register Table -->
+    <div class="card" style="padding:0;overflow:hidden">
+        <div class="card-title" style="padding:12px 16px;border-bottom:1px solid var(--bdr)">
+            Change Register
+            <span style="font-size:11px;color:var(--t4);font-weight:400;margin-left:6px">@Filtered.Count() RFC</span>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="tbl">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Titolo</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Rischio</th>
+                        <th>CAB Date</th>
+                        <th>Assegnato</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Filtered)
+                    {
+                        <tr @onclick="() => OpenDetail(c)" style="cursor:pointer">
+                            <td style="font-family:var(--mono);font-size:11px;color:var(--acc);white-space:nowrap">@c.Id</td>
+                            <td style="max-width:200px">
+                                <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@c.Title">@c.Title</div>
+                                @if (!string.IsNullOrEmpty(c.Requester))
+                                {
+                                    <div style="font-size:10px;color:var(--t4)">@c.Requester</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="tag" style="background:@TypeBg(c.Type);color:@TypeFg(c.Type);font-size:10px">@c.Type</span>
+                            </td>
+                            <td>
+                                <span class="@StatusCss(c.Status)" style="font-size:10px">@FormatStatus(c.Status)</span>
+                            </td>
+                            <td>
+                                <div style="display:flex;align-items:center;gap:5px">
+                                    <div style="width:8px;height:8px;border-radius:50%;background:@RiskColor(c.Risk * c.Impact);flex-shrink:0"></div>
+                                    <span style="font-size:11px;color:var(--t2)">@RiskLabel(c.Risk * c.Impact)</span>
+                                </div>
+                            </td>
+                            <td style="font-size:11px;color:var(--t3);white-space:nowrap;font-family:var(--mono)">
+                                @(c.CabDate.HasValue ? c.CabDate.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td>
+                                @if (c.Assignee != null)
+                                {
+                                    <div style="display:flex;align-items:center;gap:5px">
+                                        <div style="width:22px;height:22px;border-radius:50%;background:@c.Assignee.Color;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000;flex-shrink:0">@c.Assignee.Initials</div>
+                                        <span style="font-size:11px;color:var(--t2)">@c.Assignee.FullName.Split(' ').FirstOrDefault()</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span style="color:var(--t4);font-size:11px">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (!Filtered.Any())
+                    {
+                        <tr>
+                            <td colspan="7" style="text-align:center;padding:24px;color:var(--t4);font-size:12px">Nessun RFC trovato</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 5x5 Risk Matrix -->
+    <div class="card" style="padding:16px">
+        <div class="card-title" style="margin-bottom:12px">Risk Matrix</div>
+        <div style="display:flex;gap:6px;align-items:flex-end">
+            <!-- Y-axis label -->
+            <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;color:var(--t4);letter-spacing:.05em;text-transform:uppercase;margin-right:2px;align-self:center">
+                Probabilita
+            </div>
+            <div style="flex:1">
+                @for (int row = 5; row >= 1; row--)
+                {
+                    var rowVal = row;
+                    <div style="display:grid;grid-template-columns:14px repeat(5,1fr);gap:2px;margin-bottom:2px">
+                        <div style="font-size:9px;color:var(--t4);display:flex;align-items:center;justify-content:center;font-family:var(--mono)">@rowVal</div>
+                        @for (int col = 1; col <= 5; col++)
+                        {
+                            var colVal = col;
+                            var score = rowVal * colVal;
+                            var bg = MatrixCellBg(score);
+                            var hasChange = Data.Changes.Any(c => c.Risk == colVal && c.Impact == rowVal);
+                            <div class="risk-cell" style="background:@bg;height:32px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:rgba(255,255,255,.85);position:relative"
+                                 title="Impatto @colVal x Probabilita @rowVal = @score">
+                                @score
+                                @if (hasChange)
+                                {
+                                    <div style="position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:#fff;opacity:.9"></div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                <!-- X-axis labels -->
+                <div style="display:grid;grid-template-columns:14px repeat(5,1fr);gap:2px;margin-top:2px">
+                    <div></div>
+                    @for (int col = 1; col <= 5; col++)
+                    {
+                        <div style="font-size:9px;color:var(--t4);text-align:center;font-family:var(--mono)">@col</div>
+                    }
+                </div>
+                <div style="font-size:10px;color:var(--t4);text-align:center;margin-top:4px;letter-spacing:.05em;text-transform:uppercase">Impatto</div>
+            </div>
+        </div>
+        <!-- Legend -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            @foreach (var leg in RiskLegend)
+            {
+                <div style="display:flex;align-items:center;gap:4px">
+                    <div style="width:10px;height:10px;border-radius:2px;background:@leg.Color"></div>
+                    <span style="font-size:10px;color:var(--t3)">@leg.Label</span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     CAB CALENDAR
+════════════════════════════════════════════════ -->
+<div class="card" style="padding:16px;margin-bottom:14px">
+    <div class="card-title" style="margin-bottom:12px">
+        CAB Calendar
+        <span style="font-size:11px;color:var(--t4);font-weight:400;margin-left:6px">@CabChanges.Count appuntamenti</span>
+    </div>
+    @if (CabChanges.Any())
+    {
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+            @foreach (var c in CabChanges)
+            {
+                <div @onclick="() => OpenDetail(c)"
+                     style="border:1px solid var(--bdr);border-left:3px solid @TypeFg(c.Type);border-radius:var(--r);padding:12px;cursor:pointer;background:var(--bg2)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <span style="font-family:var(--mono);font-size:10px;color:var(--acc)">@c.Id</span>
+                        <span class="tag" style="background:@TypeBg(c.Type);color:@TypeFg(c.Type);font-size:10px">@c.Type</span>
+                    </div>
+                    <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:6px;line-height:1.4">@c.Title</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
+                        <span style="font-size:11px;font-family:var(--mono);color:var(--t2)">
+                            @c.CabDate!.Value.ToString("dd/MM/yyyy HH:mm")
+                        </span>
+                        <span class="@StatusCss(c.Status)" style="font-size:10px">@FormatStatus(c.Status)</span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div style="text-align:center;padding:24px;color:var(--t4);font-size:12px">
+            Nessun appuntamento CAB pianificato
+        </div>
+    }
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     NEW RFC MODAL
+════════════════════════════════════════════════ -->
+<Modal IsOpen="ShowNewChange" Title="+ RFC — Richiesta di Cambiamento" Size="lg" OnClose="CloseNewChange">
+    <div class="fgrid c2">
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Titolo <span class="req">*</span></label>
+            <input class="fi" @bind="NewTitle" placeholder="Descrizione sintetica del cambiamento" />
+        </div>
+        <div class="fg">
+            <label class="fl">Tipo</label>
+            <select class="fi" @bind="NewType">
+                @foreach (var t in Enum.GetValues<ChangeType>())
+                {
+                    <option value="@t">@t</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">Richiedente</label>
+            <input class="fi" @bind="NewRequester" placeholder="Nome richiedente" />
+        </div>
+        <div class="fg">
+            <label class="fl">Rischio (1-5)</label>
+            <input class="fi" type="number" min="1" max="5" @bind="NewRisk" />
+        </div>
+        <div class="fg">
+            <label class="fl">Impatto (1-5)</label>
+            <input class="fi" type="number" min="1" max="5" @bind="NewImpact" />
+        </div>
+        <div class="fg">
+            <label class="fl">Assegnato a</label>
+            <select class="fi" @bind="NewAssigneeId">
+                <option value="">— Seleziona agente —</option>
+                @foreach (var a in Data.Agents)
+                {
+                    <option value="@a.Id">@a.FullName</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">Data CAB</label>
+            <input class="fi" type="datetime-local" @bind="NewCabDate" />
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Descrizione</label>
+            <textarea class="fi" @bind="NewDescription" style="min-height:70px"
+                      placeholder="Descrizione dettagliata del cambiamento…"></textarea>
+        </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+        <button class="btn" @onclick="CloseNewChange">Annulla</button>
+        <button class="btn pri" @onclick="CreateChange">Crea RFC</button>
+    </div>
+</Modal>
+
+<!-- ═══════════════════════════════════════════════
+     CHANGE DETAIL MODAL
+════════════════════════════════════════════════ -->
+<Modal IsOpen="ShowDetail" Title="@(DetailChange != null ? DetailChange.Id + " — Dettaglio RFC" : "Dettaglio RFC")" Size="xl" OnClose="() => ShowDetail = false">
+    @if (DetailChange != null)
+    {
+        <!-- Tabs nav -->
+        <div class="tabs" style="margin-bottom:16px">
+            @foreach (var tab in DetailTabs)
+            {
+                <button class="tab @(DetailTab == tab.Key ? "active" : "")"
+                        @onclick="() => DetailTab = tab.Key">
+                    @tab.Label
+                </button>
+            }
+        </div>
+
+        <!-- Tab: Dettagli -->
+        <div style="display:@(DetailTab == "dettagli" ? "block" : "none")">
+            <div class="fgrid c2">
+                <div class="fg" style="grid-column:1/-1">
+                    <label class="fl">Titolo</label>
+                    <div style="font-size:14px;font-weight:600;color:var(--t1);padding:6px 0">@DetailChange.Title</div>
+                </div>
+                <div class="fg">
+                    <label class="fl">ID</label>
+                    <div style="font-family:var(--mono);font-size:12px;color:var(--acc)">@DetailChange.Id</div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Tipo</label>
+                    <span class="tag" style="background:@TypeBg(DetailChange.Type);color:@TypeFg(DetailChange.Type)">@DetailChange.Type</span>
+                </div>
+                <div class="fg">
+                    <label class="fl">Status</label>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span class="@StatusCss(DetailChange.Status)">@FormatStatus(DetailChange.Status)</span>
+                        <select class="fi" style="padding:4px 24px 4px 8px;font-size:11px;width:auto"
+                                @bind="DetailChange.Status">
+                            @foreach (var s in Enum.GetValues<ChangeStatus>())
+                            {
+                                <option value="@s">@FormatStatus(s)</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Richiedente</label>
+                    <div style="font-size:12px;color:var(--t2)">@(DetailChange.Requester ?? "—")</div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Assegnato a</label>
+                    <div style="display:flex;align-items:center;gap:6px">
+                        @if (DetailChange.Assignee != null)
+                        {
+                            <div style="width:24px;height:24px;border-radius:50%;background:@DetailChange.Assignee.Color;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000">@DetailChange.Assignee.Initials</div>
+                            <span style="font-size:12px;color:var(--t2)">@DetailChange.Assignee.FullName</span>
+                        }
+                        else
+                        {
+                            <span style="font-size:12px;color:var(--t4)">Non assegnato</span>
+                        }
+                    </div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Data CAB</label>
+                    <div style="font-size:12px;color:var(--t2);font-family:var(--mono)">
+                        @(DetailChange.CabDate.HasValue ? DetailChange.CabDate.Value.ToString("dd/MM/yyyy HH:mm") : "—")
+                    </div>
+                </div>
+                <div class="fg">
+                    <label class="fl">Creato il</label>
+                    <div style="font-size:12px;color:var(--t4);font-family:var(--mono)">@DetailChange.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                </div>
+                @if (!string.IsNullOrEmpty(DetailChange.Description))
+                {
+                    <div class="fg" style="grid-column:1/-1">
+                        <label class="fl">Descrizione</label>
+                        <div style="font-size:12px;color:var(--t2);line-height:1.6;padding:8px 10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--bdr)">@DetailChange.Description</div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Tab: Rischio & Impatto -->
+        <div style="display:@(DetailTab == "rischio" ? "block" : "none")">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                <div class="card" style="padding:16px;text-align:center">
+                    <div style="font-size:11px;color:var(--t4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Probabilita / Rischio</div>
+                    <div style="font-size:36px;font-weight:800;color:@RiskColor(DetailChange.Risk * DetailChange.Impact)">@DetailChange.Risk</div>
+                    <div style="font-size:11px;color:var(--t3);margin-top:4px">su 5</div>
+                </div>
+                <div class="card" style="padding:16px;text-align:center">
+                    <div style="font-size:11px;color:var(--t4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Impatto</div>
+                    <div style="font-size:36px;font-weight:800;color:@RiskColor(DetailChange.Risk * DetailChange.Impact)">@DetailChange.Impact</div>
+                    <div style="font-size:11px;color:var(--t3);margin-top:4px">su 5</div>
+                </div>
+            </div>
+            <div style="text-align:center;padding:20px;background:@MatrixCellBg(DetailChange.Risk * DetailChange.Impact);border-radius:var(--r)">
+                <div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Score complessivo</div>
+                <div style="font-size:32px;font-weight:800;color:#fff">@(DetailChange.Risk * DetailChange.Impact)</div>
+                <div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:4px;font-weight:600">@RiskLabel(DetailChange.Risk * DetailChange.Impact)</div>
+            </div>
+            <div style="margin-top:14px;font-size:12px;color:var(--t2);line-height:1.6">
+                Posizione nella Risk Matrix: cella <strong>Impatto @DetailChange.Impact x Probabilita @DetailChange.Risk</strong>
+                — score <strong>@(DetailChange.Risk * DetailChange.Impact)</strong>
+                — categoria <strong>@RiskLabel(DetailChange.Risk * DetailChange.Impact)</strong>.
+            </div>
+        </div>
+
+        <!-- Tab: Implementazione -->
+        <div style="display:@(DetailTab == "implementazione" ? "block" : "none")">
+            <div class="fg" style="margin-bottom:14px">
+                <label class="fl">Piano di Implementazione</label>
+                <textarea class="fi" @bind="DetailChange.ImplementationPlan"
+                          style="min-height:120px"
+                          placeholder="Descrivere i passi di implementazione…"></textarea>
+            </div>
+            <div class="fg">
+                <label class="fl">Piano di Rollback</label>
+                <textarea class="fi" @bind="DetailChange.RollbackPlan"
+                          style="min-height:120px"
+                          placeholder="Descrivere la procedura di rollback in caso di fallimento…"></textarea>
+            </div>
+        </div>
+
+        <!-- Tab: CAB Approval -->
+        <div style="display:@(DetailTab == "cab" ? "block" : "none")">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                <div class="fg">
+                    <label class="fl">Data CAB</label>
+                    <input class="fi" type="datetime-local" @bind="DetailChange.CabDate" />
+                </div>
+                <div class="fg">
+                    <label class="fl">Status attuale</label>
+                    <div style="padding:6px 0">
+                        <span class="@StatusCss(DetailChange.Status)" style="font-size:11px">@FormatStatus(DetailChange.Status)</span>
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+                <button class="btn" style="background:rgba(48,196,141,.15);color:#30C48D;border-color:rgba(48,196,141,.3)"
+                        @onclick="() => { DetailChange.Status = ChangeStatus.Approved; }">
+                    Approva
+                </button>
+                <button class="btn" style="background:rgba(255,77,109,.1);color:#FF4D6D;border-color:rgba(255,77,109,.3)"
+                        @onclick="() => { DetailChange.Status = ChangeStatus.Rejected; }">
+                    Rifiuta
+                </button>
+                <button class="btn" style="background:rgba(255,176,32,.1);color:#FFB020;border-color:rgba(255,176,32,.3)"
+                        @onclick="() => { DetailChange.Status = ChangeStatus.PendingCAB; }">
+                    Rimanda a CAB
+                </button>
+                <button class="btn" style="background:rgba(75,158,255,.1);color:#4B9EFF;border-color:rgba(75,158,255,.3)"
+                        @onclick="() => { DetailChange.Status = ChangeStatus.Scheduled; }">
+                    Pianifica
+                </button>
+            </div>
+            <div style="font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
+                Change Advisory Board
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                @foreach (var agent in Data.Agents)
+                {
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--bdr);border-radius:var(--r);background:var(--bg2)">
+                        <div style="width:28px;height:28px;border-radius:50%;background:@agent.Color;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;flex-shrink:0">@agent.Initials</div>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:600;color:var(--t1)">@agent.FullName</div>
+                            <div style="font-size:10px;color:var(--t4)">@agent.Role · @agent.Department</div>
+                        </div>
+                        <span style="font-size:10px;color:var(--t4);background:var(--bg3);padding:2px 8px;border-radius:10px">Membro CAB</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Footer actions -->
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:12px;border-top:1px solid var(--bdr)">
+            <button class="btn" @onclick="() => ShowDetail = false">Chiudi</button>
+            <button class="btn pri" @onclick="() => ShowDetail = false">Salva modifiche</button>
+        </div>
+    }
+</Modal>
+
+@code {
+    // ── State ────────────────────────────────────────────────────────────────
+    private string SearchQuery  = "";
+    private string FilterType   = "";
+    private string FilterStatus = "";
+
+    private void OnFilterType(ChangeEventArgs e) => FilterType = e.Value?.ToString() ?? "";
+    private void OnFilterStatus(ChangeEventArgs e) => FilterStatus = e.Value?.ToString() ?? "";
+
+    // New RFC form
+    private bool       ShowNewChange  = false;
+    private string     NewTitle       = "";
+    private ChangeType NewType        = ChangeType.Standard;
+    private string     NewRequester   = "";
+    private int        NewRisk        = 2;
+    private int        NewImpact      = 2;
+    private string     NewAssigneeId  = "";
+    private string     NewDescription = "";
+    private DateTime?  NewCabDate;
+
+    // Detail modal
+    private bool    ShowDetail   = false;
+    private Change? DetailChange;
+    private string  DetailTab    = "dettagli";
+
+    // ── Computed ─────────────────────────────────────────────────────────────
+    private IEnumerable<Change> Filtered => Data.Changes.Where(c =>
+    {
+        if (!string.IsNullOrEmpty(FilterType)   && c.Type.ToString()   != FilterType)   return false;
+        if (!string.IsNullOrEmpty(FilterStatus) && c.Status.ToString() != FilterStatus) return false;
+        if (!string.IsNullOrEmpty(SearchQuery)  &&
+            !c.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) &&
+            !c.Id.Contains(SearchQuery,    StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    });
+
+    private List<Change> CabChanges =>
+        Data.Changes.Where(c => c.CabDate.HasValue)
+                    .OrderBy(c => c.CabDate)
+                    .ToList();
+
+    // ── Tab definitions ───────────────────────────────────────────────────────
+    private record TabDef(string Key, string Label);
+    private static readonly TabDef[] DetailTabs =
+    [
+        new("dettagli",        "Dettagli"),
+        new("rischio",         "Rischio & Impatto"),
+        new("implementazione", "Implementazione"),
+        new("cab",             "CAB Approval"),
+    ];
+
+    // ── Risk Matrix legend ────────────────────────────────────────────────────
+    private record LegendItem(string Color, string Label);
+    private static readonly LegendItem[] RiskLegend =
+    [
+        new("#30C48D", "Basso (1-2)"),
+        new("#FFB020", "Medio (3-5)"),
+        new("#FF7846", "Alto (6-9)"),
+        new("#FF4D6D", "Critico (10-15)"),
+        new("#C97BFF", "Estremo (16-25)"),
+    ];
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string MatrixCellBg(int score) => score switch
+    {
+        >= 16 => "#C97BFF",
+        >= 10 => "#FF4D6D",
+        >= 6  => "#FF7846",
+        >= 3  => "#FFB020",
+        _     => "#30C48D",
+    };
+
+    private static string RiskColor(int score) => score switch
+    {
+        >= 16 => "#C97BFF",
+        >= 10 => "#FF4D6D",
+        >= 6  => "#FF7846",
+        >= 3  => "#FFB020",
+        _     => "#30C48D",
+    };
+
+    private static string RiskLabel(int score) => score switch
+    {
+        >= 16 => "Estremo",
+        >= 10 => "Critico",
+        >= 6  => "Alto",
+        >= 3  => "Medio",
+        _     => "Basso",
+    };
+
+    private static string TypeBg(ChangeType t) => t switch
+    {
+        ChangeType.Emergency => "rgba(255,77,109,.15)",
+        ChangeType.Major     => "rgba(201,123,255,.15)",
+        ChangeType.Minor     => "rgba(75,158,255,.15)",
+        _                    => "rgba(48,196,141,.15)",
+    };
+
+    private static string TypeFg(ChangeType t) => t switch
+    {
+        ChangeType.Emergency => "#FF4D6D",
+        ChangeType.Major     => "#C97BFF",
+        ChangeType.Minor     => "#4B9EFF",
+        _                    => "#30C48D",
+    };
+
+    private static string StatusCss(ChangeStatus s) => s switch
+    {
+        ChangeStatus.Draft        => "st-clos",
+        ChangeStatus.PendingCAB   => "st-wait",
+        ChangeStatus.Approved     => "st-reso",
+        ChangeStatus.Scheduled    => "st-prog",
+        ChangeStatus.Implementing => "st-prog",
+        ChangeStatus.Completed    => "st-reso",
+        ChangeStatus.Rejected     => "st-open",
+        ChangeStatus.RolledBack   => "st-open",
+        _                         => "st-clos",
+    };
+
+    private static string FormatStatus(ChangeStatus s) => s switch
+    {
+        ChangeStatus.PendingCAB => "Pending CAB",
+        ChangeStatus.RolledBack => "Rolled Back",
+        _                       => s.ToString(),
+    };
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+    private void CloseNewChange()
+    {
+        ShowNewChange  = false;
+        NewTitle       = "";
+        NewDescription = "";
+        NewRequester   = "";
+        NewAssigneeId  = "";
+        NewRisk        = 2;
+        NewImpact      = 2;
+        NewType        = ChangeType.Standard;
+        NewCabDate     = null;
+    }
+
+    private void CreateChange()
+    {
+        if (string.IsNullOrWhiteSpace(NewTitle)) return;
+
+        var seq    = Data.Changes.Count + 1;
+        var agent  = Data.Agents.FirstOrDefault(a => a.Id == NewAssigneeId);
+        var change = new Change
+        {
+            Id          = $"CHG-{seq:D3}",
+            Title       = NewTitle,
+            Type        = NewType,
+            Status      = ChangeStatus.Draft,
+            Risk        = Math.Clamp(NewRisk,   1, 5),
+            Impact      = Math.Clamp(NewImpact, 1, 5),
+            Requester   = NewRequester,
+            Description = NewDescription,
+            Assignee    = agent,
+            AssigneeId  = agent?.Id,
+            CabDate     = NewCabDate,
+            CreatedAt   = DateTime.UtcNow,
+        };
+
+        Data.Changes.Insert(0, change);
+        CloseNewChange();
+    }
+
+    private void OpenDetail(Change c)
+    {
+        DetailChange = c;
+        DetailTab    = "dettagli";
+        ShowDetail   = true;
+    }
+}

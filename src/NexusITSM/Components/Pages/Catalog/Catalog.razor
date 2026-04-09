@@ -1,0 +1,158 @@
+@page "/catalog"
+@inject NexusITSM.Services.DemoDataService Data
+
+<PageTitle>Service Catalog — NexusITSM</PageTitle>
+
+<div style="margin-bottom:18px">
+    <div style="font-size:20px;font-weight:700;color:var(--t1)">Service Catalog</div>
+    <div style="font-size:12px;color:var(--t4);margin-top:3px">Seleziona una categoria per aprire una nuova richiesta di servizio</div>
+</div>
+
+<div class="cat-grid">
+    @foreach (var cat in Categories)
+    {
+        <div class="cat-card" @onclick="() => OpenModal(cat)">
+            <div class="cat-icon">@cat.Icon</div>
+            <div class="cat-name">@cat.Name</div>
+            <div class="cat-desc">@cat.Description</div>
+            <div class="cat-sla">SLA: @cat.Sla</div>
+        </div>
+    }
+</div>
+
+<Modal IsOpen="ModalOpen" Title="@ModalTitle" OnClose="CloseModal" Size="lg">
+    <div class="fgrid c2">
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Titolo <span class="req">*</span></label>
+            <input class="fi" @bind="FormTitle" placeholder="Descrizione breve della richiesta" />
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+            <label class="fl">Descrizione</label>
+            <textarea class="fi" @bind="FormDescription" style="min-height:80px" placeholder="Dettagli della richiesta…"></textarea>
+        </div>
+        <div class="fg">
+            <label class="fl">Priorità</label>
+            <select class="fi" @bind="FormPriority">
+                @foreach (var p in Enum.GetValues<TicketPriority>())
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+        </div>
+        <div class="fg">
+            <label class="fl">Richiedente</label>
+            <input class="fi" @bind="FormRequester" placeholder="Nome e cognome" />
+        </div>
+        <div class="fg">
+            <label class="fl">Reparto</label>
+            <input class="fi" @bind="FormDepartment" placeholder="Es: IT, HR, Finance" />
+        </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
+        <button class="btn" @onclick="CloseModal">Annulla</button>
+        <button class="btn pri" @onclick="SubmitRequest">Invia Richiesta</button>
+    </div>
+</Modal>
+
+@if (ConfirmMessage != null)
+{
+    <div style="position:fixed;bottom:24px;right:24px;background:var(--acc3);color:#000;padding:10px 18px;border-radius:var(--r);font-size:12px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+        ✓ @ConfirmMessage
+    </div>
+}
+
+@code {
+    private record ServiceCategory(string Icon, string Name, string Description, string Sla, TicketCategory Category);
+
+    private static readonly ServiceCategory[] Categories =
+    [
+        new("💻", "Hardware", "Richieste hardware, laptop, periferiche", "24h", TicketCategory.Hardware),
+        new("📦", "Software", "Installazione e licenze software", "8h", TicketCategory.Software),
+        new("🌐", "Network", "Connettività, VPN, WiFi", "4h", TicketCategory.Network),
+        new("✉", "Email", "Caselle email, distribuzione", "8h", TicketCategory.Email),
+        new("🔑", "Access", "Account, permessi, badge", "4h", TicketCategory.AccessManagement),
+        new("🔒", "Security", "Incident sicurezza, compliance", "2h", TicketCategory.Security),
+        new("🖨", "Printing", "Stampanti, scanner, fax", "24h", TicketCategory.Printer),
+        new("📱", "Mobile", "Smartphone, tablet, MDM", "8h", TicketCategory.Mobile),
+    ];
+
+    private bool ModalOpen;
+    private string ModalTitle = "";
+    private ServiceCategory? SelectedCategory;
+    private string? ConfirmMessage;
+
+    // Form fields
+    private string FormTitle = "";
+    private string FormDescription = "";
+    private TicketPriority FormPriority = TicketPriority.Medium;
+    private string FormRequester = "";
+    private string FormDepartment = "";
+
+    private void OpenModal(ServiceCategory cat)
+    {
+        SelectedCategory = cat;
+        ModalTitle = $"Nuova Richiesta — {cat.Name}";
+        FormTitle = "";
+        FormDescription = "";
+        FormPriority = TicketPriority.Medium;
+        FormRequester = "";
+        FormDepartment = "";
+        ModalOpen = true;
+    }
+
+    private void CloseModal() => ModalOpen = false;
+
+    private async void SubmitRequest()
+    {
+        if (string.IsNullOrWhiteSpace(FormTitle) || SelectedCategory == null) return;
+
+        var agent = Data.Agents[1]; // Sara Bianchi — L1 default
+        var group = Data.Groups[0]; // L1 Help Desk default
+        var slaHours = FormPriority switch
+        {
+            TicketPriority.Critical => 2,
+            TicketPriority.High => 4,
+            TicketPriority.Medium => 8,
+            _ => 24
+        };
+
+        var ticket = new Ticket
+        {
+            Id = Data.NextTicketId(),
+            Title = FormTitle,
+            Description = FormDescription,
+            Priority = FormPriority,
+            Category = SelectedCategory.Category,
+            Status = TicketStatus.Open,
+            Requester = FormRequester,
+            Department = FormDepartment,
+            Assignee = agent,
+            AssigneeId = agent.Id,
+            Group = group,
+            GroupId = group.Id,
+            CreatedAt = DateTime.UtcNow,
+            SlaBreachAt = DateTime.UtcNow.AddHours(slaHours),
+            SlaPercent = 0,
+            SlaStatus = SlaStatus.Ok,
+            Tags = [SelectedCategory.Name.ToLower()],
+            Timeline =
+            [
+                new TimelineEvent
+                {
+                    Type = TimelineEventType.Created,
+                    Actor = string.IsNullOrWhiteSpace(FormRequester) ? "Portale" : FormRequester,
+                    Message = $"Richiesta aperta via Service Catalog — {SelectedCategory.Name}",
+                    CreatedAt = DateTime.UtcNow
+                }
+            ]
+        };
+
+        Data.Tickets.Insert(0, ticket);
+        ModalOpen = false;
+        ConfirmMessage = $"Richiesta {ticket.Id} creata con successo";
+        StateHasChanged();
+        await Task.Delay(3000);
+        ConfirmMessage = null;
+        StateHasChanged();
+    }
+}
